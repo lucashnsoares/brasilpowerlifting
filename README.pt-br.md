@@ -2,26 +2,76 @@
 
 # Gestão de Torneios Brasil Powerlifting
 
-Sistema 100% offline para gestão de campeonatos de powerlifting e placares em tempo real na rede local (Wi-Fi/LAN), com suporte a **Português (PT-BR)** e **Inglês (EN)**[cite: 3].
+Sistema **100% offline-first** para organização, arbitragem e placares em tempo real na rede local (Wi-Fi/LAN) de campeonatos de powerlifting e esportes de força — projetado para resistir a quedas de energia, falhas de internet e imprevistos de competição. Disponível em **Português (PT-BR)** e **Inglês (EN)**.
 
 > **Prefere o aplicativo pronto para uso sem precisar compilar?**  
-> Baixe a versão oficial assinada para Windows na **[Microsoft Store](https://apps.microsoft.com/store/detail/9N79D1086G2W)** para uso não comercial, ou saiba mais em **[brasilpowerlifting.com.br](https://brasilpowerlifting.com.br)**.
+> Baixe a versão oficial gratuita no Brasil e assinada para Windows na **[Microsoft Store](https://apps.microsoft.com/detail/9n79d1086g2w)** ou consulte o **[Manual Oficial](https://brasilpowerlifting.com.br/manual)**.
+
+---
+
+## Flexibilidade Total de Regras
+
+Feito para que qualquer organizador realize qualquer tipo de campeonato de powerlifting, independentemente de quão rígidas ou flexíveis sejam as regras:
+
+- **Todas as Modalidades:** Full Power, Push-Pull, Supino Solo, Terra Solo e Agachamento Solo.
+- **Dobra de Categorias de Idade sem Duplicar o Atleta:** Inscreva o mesmo atleta em múltiplas divisões etárias simultaneamente (ex.: *Júnior* + *Open* ou *Master* + *Open*) sem duplicar cadastros nem dividir tentativas.
+- **Regras 100% Personalizáveis:** Configure livremente categorias de peso, divisões de equipamento (Raw, Equipado, Faixas, etc.) e divisões de idade.
+- **Múltiplas Plataformas:** Gerencie de **1 a 5 plataformas simultâneas** no mesmo evento.
+- **Modo Planilha (Escape de Emergência):** Permite edição direta sem travas de fila sempre que imprevistos do evento exigirem ajuste imediato pela mesa.
 
 ---
 
 ## Principais Recursos
 
-- **100% Offline:** Funciona localmente com SQLite e backups automáticos — sem depender de internet no dia do campeonato[cite: 3].
-- **Dispositivos na Mesma Rede (LAN):** Conecte celulares dos árbitros (`/arbitro`), telão da plateia (`/display`), TV do aquecimento (`/aquecimento`) e pesagem (`/pesagem`) na porta `3000`[cite: 3].
-- **Painel Desktop Windows (`PainelPowerlifting.cs`):** Impede a suspensão do Windows, reinicia o servidor automaticamente em caso de falha, detecta o IP da rede Wi-Fi e libera o Firewall com um clique[cite: 3].
-- **Nuvem Opcional (Traga sua Própria API):** O código não possui chaves nem URLs privadas embutidas. Clubes sem fins lucrativos podem conectar sua própria API e banco de dados na Central da Nuvem (`/nuvem`)[cite: 3].
+- **Mesa de Controle (`/admin`):** Operação rápida de tentativas com **calculadora visual automática de montagem de anilhas** (calibradas ou convencionais).
+- **Periféricos em Tempo Real na Rede Local (Mesmo Wi-Fi, Sem Internet):**
+  - **Painel do Árbitro (`/arbitro`):** Luzes brancas e vermelhas em tempo real direto no celular dos árbitros.
+  - **Telão da Plateia (`/display`) e TV de Aquecimento (`/aquecimento`):** Atualização instantânea de ordem de chamada, alturas de rack e cronômetro.
+  - **Gerador de QR Codes Offline:** Gera automaticamente QR Codes em PNG e cartazes A4 imprimíveis para conexão rápida de celulares e Smart TVs.
+- **Pesagem Oficial (`/pesagem`):** Registro de peso corporal, primeiras tentativas (pedidas), alturas de rack/trava e sugestão automática de mudança de categoria.
+- **Baterias Inteligentes e Desempates:** Montagem automática de baterias, remanejamento manual e suporte a baterias avulsas para **Tentativas de Recorde** ou **Desempates**.
+- **Resultados e Rankings Automáticos (`/resultados`):** Classificação imediata com cálculo de **DOTS** e **Wilks** (Melhor Atleta / *Best Lifter*).
+- **Importação Offline via Excel e JSON:** Importe listas de inscritos diretamente de planilhas Excel ou arquivos `.json` sem digitar atleta por atleta — mesmo 100% offline.
+- **Central da Nuvem Opcional (`/nuvem`):** Backups remotos, Cofre de 20 snapshots, download de inscrições online, transmissão ao vivo pela web e *overlays* para lives (via [brasilpowerlifting.com.br](https://brasilpowerlifting.com.br) ou usando sua própria nuvem).
+
+---
+
+## Engenharia de Resiliência e Proteção Contra Falhas
+
+Competições — especialmente torneios amadores — são imprevisíveis. Toda a arquitetura foi construída para impedir corrupção de dados e manter o campeonato rodando sem interrupções:
+
+### Integridade de Dados e Sincronização
+- **SQLite em Modo WAL e Salvamento Automático:** Opera com *Write-Ahead Logging* (WAL), controle rigoroso de concorrência e backups locais automáticos para evitar corrupção do banco em desligamentos bruscos.
+- **Sincronização Master/Slave:** No dia do campeonato, o aplicativo desktop na mesa é sempre o **Master** (fonte única da verdade), mantendo a nuvem isolada como réplica **Slave**.
+- **Auto-Push com Retentativa Controlada:** Sincronização em segundo plano sem bloqueio e com retentativas controladas para que instabilidades na internet do local nunca travem a mesa.
+- **Verificação Criptográfica SHA-256:** Cada pacote sincronizado passa por validação determinística de hash SHA-256 para bloquear envios truncados ou corrompidos.
+- **Tratamento Defensivo e Auto-Recuperação (*Self-Healing*):** Tratamento de erros em todos os endpoints HTTP e canais **Socket.io**, com rotinas de auto-recuperação desenhadas para absorver erros humanos sem derrubar o evento.
+
+### Watchdog Nativo em C# (`PainelPowerlifting.cs`)
+Ao compilar e usar o painel desktop do Windows, o aplicativo roda sob um supervisor nativo que protege o processo do servidor:
+- **Reinício Silencioso e Reidratação de Telas:** Detecta falhas ou travamentos e reinicia o `node.exe` de forma segura e silenciosa (~200ms), reidratando automaticamente as telas abertas no navegador sem perder dados nem corromper o banco.
+- **Proteção contra Corrida na Porta 3000 (*Port 3000 Race*):** Evita colisões de porta durante a inicialização e reinícios rápidos.
+- **Proteção contra Processos Duplicados e *Job Objects*:** Impede instâncias duplicadas via Mutex global do Windows e vincula o `node.exe` a um *Windows Job Object* para jamais deixar processos fantasmas presos em segundo plano.
+- **Proteção contra Starvation do `.NET ServicePointManager`:** Ajusta limites de conexões simultâneas e TLS para que verificações de saúde do watchdog nunca congelem nem causem falsos reinícios.
+- **Bloqueio de Suspensão do Windows:** Mantém o notebook ativo durante toda a competição e oferece liberação do Firewall do Windows em um clique.
+
+---
+
+## Conecte Sua Própria Nuvem (Self-Hosting)
+
+O código-fonte **não possui URLs privadas nem chaves embutidas**. Clubes sem fins lucrativos e desenvolvedores que desejarem backups remotos, transmissão ao vivo ou inscrições web na própria infraestrutura podem conectar sua própria API e banco de dados.
+
+👉 **Especificação Técnica Completa:** **[Guia de Sincronização e Hospedagem em Nuvem Própria (PT-BR)](docs/cloud_integration_guide_pt-BR.md)**  
+*(Inclui as 7 travas de segurança, especificação do checksum canônico SHA-256, contrato de todas as rotas REST e script completo para SQL Server / Azure SQL.)*
 
 ---
 
 ## Pré-requisitos
 
 - **Node.js (x64, v20 ou superior)** — [Baixar em nodejs.org](https://nodejs.org/)
-- **Windows 10/11 (x64)** com .NET Framework 4.x (já incluso no Windows) para compilar o painel desktop[cite: 3, 4]
+- **Windows 10 (versão 17763.0+) ou Windows 11 (x64)** — 4 GB de RAM mínimo (8 GB recomendado)
+- **.NET Framework 4.x** (já incluso no Windows) para compilar o `PainelPowerlifting.cs`
+- **C++ Build Tools** (apenas caso o `better-sqlite3` precise compilar o módulo nativo para sua versão do Node.js)
 
 ---
 
@@ -39,34 +89,45 @@ npm install
 
 #### Opção A: Execução Rápida via Terminal (Windows, Linux ou macOS)
 ```bash
-node server.js
+npm start
 ```
-Acesse `http://localhost:3000` no navegador[cite: 3].
+Acesse `http://localhost:3000` no navegador.
 
 #### Opção B: Compilar o Painel Desktop do Windows (`PainelPowerlifting.exe`)
+Compilar o supervisor C# ativa o painel de controle, reinício automático silencioso, detecção de IP Wi-Fi, bloqueio de suspensão e liberação do Firewall em um clique.
 
-1. **Compile o `PainelPowerlifting.cs` (x64)** usando o compilador nativo do .NET no Windows[cite: 4]:
+1. **Compile o `PainelPowerlifting.cs` (x64)** usando o compilador nativo do .NET no Windows:
 
    ```powershell
    C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe /target:winexe /platform:x64 /optimize+ /out:PainelPowerlifting.exe /win32icon:icone_power.ico PainelPowerlifting.cs
    ```
 
 2. **Copie o `node.exe` para a pasta raiz do projeto:**  
-   O `PainelPowerlifting.exe` procura o arquivo `node.exe` na mesma pasta onde está o `server.js`[cite: 3]:
+   O `PainelPowerlifting.exe` executa o `node.exe` localizado na mesma pasta do `server.js`:
 
    ```powershell
    Copy-Item (Get-Command node).Source .\node.exe
    ```
 
 3. **Execute o aplicativo:**  
-   Abra o `PainelPowerlifting.exe`. O servidor iniciará na porta `3000` e abrirá automaticamente `http://localhost:3000`[cite: 3].
+   Abra o `PainelPowerlifting.exe`. O servidor iniciará na porta `3000` e abrirá automaticamente `http://localhost:3000`.
 
 ---
 
-## Rede Local (Wi-Fi) e Backups
+## Rede Local (Wi-Fi) e Backups Locais
 
-- Clique em **Liberar Firewall (Wi-Fi)** no painel para liberar a porta TCP `3000` para celulares e Smart TVs na mesma rede[cite: 3].
-- O banco de dados e os backups automáticos ficam salvos em `%LOCALAPPDATA%\BrasilPowerlifting`[cite: 2, 3].
+1. Conecte o computador da mesa, celulares dos árbitros e Smart TVs ao mesmo roteador Wi-Fi.
+2. Clique em **Liberar Firewall (Wi-Fi)** no `PainelPowerlifting.exe` (ou libere manualmente a porta TCP `3000` de entrada no Firewall do Windows caso use a Opção A).
+3. Acesse os links LAN ou leia os QR Codes gerados no painel inicial (`/arbitro`, `/display`, `/aquecimento`, `/pesagem`).
+4. O banco SQLite e os backups automáticos ficam salvos em `%LOCALAPPDATA%\BrasilPowerlifting`.
+
+---
+
+## Documentação e Contato
+
+- **Manual Oficial:** [brasilpowerlifting.com.br/manual](https://brasilpowerlifting.com.br/manual)
+- **Guia de Nuvem Própria:** [docs/cloud_integration_guide_pt-BR.md](docs/cloud_integration_guide_pt-BR.md)
+- **Contato:** contato@brasilpowerlifting.com.br
 
 ---
 
@@ -75,4 +136,4 @@ Acesse `http://localhost:3000` no navegador[cite: 3].
 Este projeto é distribuído sob a licença **[PolyForm Noncommercial License 1.0.0](LICENSE.md)**.
 
 - **Uso gratuito permitido:** Uso pessoal, campeonatos amadores, eventos beneficentes e clubes universitários ou sem fins lucrativos (incluindo cobrança de taxa de inscrição exclusivamente para custear a estrutura do evento).
-- **Uso comercial:** Federações e eventos com fins lucrativos devem adquirir uma licença entrando em contato pelo [brasilpowerlifting.com.br](https://brasilpowerlifting.com.br).
+- **Uso comercial:** Federações e promotores de eventos com fins lucrativos devem adquirir entrando em contato pelo site **[brasilpowerlifting.com.br](https://brasilpowerlifting.com.br)**.
