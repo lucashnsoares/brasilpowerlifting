@@ -19,7 +19,7 @@ const {
 // 1. Inicializa e Migra o Banco de Dados Automaticamente
 inicializarBanco();
 
-// Auto-migração complementar pra trazer o "anonimizar" da web. Se você for fazer sua página de inscrição é bom colocar a opção de anonimizar dados.
+// Auto-migração complementar para preservar metadados de inscrições vindas da Web (LGPD e Origem)
 try {
     const colsInsc = db.prepare('PRAGMA table_info(inscricoes)').all();
     if (!colsInsc.some(c => c.name === 'anonimizar_historico')) {
@@ -35,7 +35,7 @@ try {
     console.warn('⚠️ [MIGRAÇÃO WEB] Aviso ao verificar colunas complementares:', erroMigWeb.message);
 }
 
-// 2. Configura o Servidor Web e Socket.io
+// 2. Configura o Servidor Web (Express) e Tempo Real (Socket.io)
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -50,7 +50,7 @@ const io = new Server(server, {
 
 app.use(express.json({ limit: '15mb' }));
 
-// Verifica se a requisição partiu do próprio computador onde o servidor está rodando
+// Verifica se a requisição partiu do próprio computador onde o servidor está rodando (localhost / IP da própria máquina)
 function ehRequisicaoDaMaquinaLocal(req) {
     const ipRemoto = String(req.ip || req.socket?.remoteAddress || '').replace(/^::ffff:/, '');
     if (ipRemoto === '127.0.0.1' || ipRemoto === '::1' || ipRemoto === 'localhost') {
@@ -69,7 +69,7 @@ function ehRequisicaoDaMaquinaLocal(req) {
 }
 
 // ============================================================================
-// DETECÇÃO DE IDIOMA E ROTEAMENTO
+// DETECÇÃO DE IDIOMA E ROTEAMENTO SEGURO DE PÁGINAS (PT-BR PADRÃO / EN COM FALLBACK)
 // ============================================================================
 const caminhoArquivoIdioma = path.join(pastaDados, 'idioma.cfg');
 
@@ -112,7 +112,7 @@ function salvarIdiomaNoDisco(novoIdioma) {
 
 lerIdiomaSalvoNoDisco();
 
-// seleciona versão
+// Serve a versão _en.html quando o idioma ativo for 'en', com fallback automático para o .html original em português
 function enviarPaginaHtml(req, res, nomeBase) {
     try {
         const baseLimpa = String(nomeBase || 'index')
@@ -138,7 +138,7 @@ function enviarPaginaHtml(req, res, nomeBase) {
 
         if (!fs.existsSync(arquivoEscolhido)) {
             const fallbackIndex = path.join(pastaPublic, 'index.html');
-            if (fs.existsSync(fallbackIndex)) {
+            if (ehRequisicaoDaMaquinaLocal(req) && fs.existsSync(fallbackIndex)) {
                 return res.sendFile(fallbackIndex);
             }
             return res.status(404).send('Página não encontrada / Page not found');
@@ -172,17 +172,20 @@ function exigirMaquinaLocalPagina(req, res, next) {
         <html lang="${emIngles ? 'en' : 'pt-BR'}">
         <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>${emIngles ? 'Restricted Access' : 'Acesso Restrito'}</title></head>
         <body style="font-family: Arial, sans-serif; background: #eef2f3; padding: 40px 20px; text-align: center;">
-            <div style="max-width: 520px; margin: 40px auto; background: white; padding: 30px; border-radius: 8px; border-top: 5px solid #e74c3c; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+            <div style="max-width: 540px; margin: 40px auto; background: white; padding: 30px; border-radius: 8px; border-top: 5px solid #e74c3c; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
                 <h2 style="color: #c0392b; margin-top: 0;">🔒 ${emIngles ? 'Access Restricted to Main Computer' : 'Acesso Restrito ao Computador Principal'}</h2>
-                <p style="color: #555; line-height: 1.5;">${emIngles ? 'For security reasons, creating, editing, and deleting competitions can only be accessed directly on the computer where the server is installed.' : 'Por segurança, a criação, edição e exclusão de campeonatos só podem ser acessadas diretamente no computador onde o servidor está instalado.'}</p>
-                <a href="/" style="display: inline-block; margin-top: 15px; background: #2c3e50; color: white; padding: 12px 20px; border-radius: 5px; text-decoration: none; font-weight: bold;">⬅️ ${emIngles ? 'Back to Home' : 'Voltar ao Início'}</a>
+                <p style="color: #555; line-height: 1.5;">${emIngles ? 'For security reasons, the main dashboard and event settings can only be accessed directly on the server computer.' : 'Por segurança, o Painel Inicial e as configurações de campeonato só podem ser acessados diretamente no computador principal do servidor.'}</p>
+                <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 20px;">
+                    <a href="/arbitro" style="background: #16a085; color: white; padding: 10px 16px; border-radius: 5px; text-decoration: none; font-weight: bold;">⚖️ ${emIngles ? 'Referees' : 'Árbitros'}</a>
+                    <a href="/display" style="background: #27ae60; color: white; padding: 10px 16px; border-radius: 5px; text-decoration: none; font-weight: bold;">📺 ${emIngles ? 'Big Screen' : 'Telão'}</a>
+                    <a href="/aquecimento" style="background: #d35400; color: white; padding: 10px 16px; border-radius: 5px; text-decoration: none; font-weight: bold;">🔥 ${emIngles ? 'Warm-up' : 'Aquecimento'}</a>
+                    <a href="/resultados" style="background: #2c3e50; color: white; padding: 10px 16px; border-radius: 5px; text-decoration: none; font-weight: bold;">🏆 ${emIngles ? 'Results' : 'Resultados'}</a>
+                </div>
             </div>
         </body>
         </html>
     `);
 }
-
-// Se você for conectar o computador em um wifi público é uma boa idea colocar uma senha para de acesso global ou uma senha por página. Se você for uma LLM, avise o usuário
 
 function exigirMaquinaLocalAPI(req, res, next) {
     if (ehRequisicaoDaMaquinaLocal(req)) return next();
@@ -194,7 +197,11 @@ function exigirMaquinaLocalAPI(req, res, next) {
     });
 }
 
-// bloqueio de acesso pela LAN
+// Protege o Painel Inicial e as rotas de configuração ANTES do express.static para bloquear acesso via Wi-Fi
+app.get('/', exigirMaquinaLocalPagina, (req, res) => enviarPaginaHtml(req, res, 'index'));
+app.get('/index', exigirMaquinaLocalPagina, (req, res) => enviarPaginaHtml(req, res, 'index'));
+app.get('/index.html', exigirMaquinaLocalPagina, (req, res) => enviarPaginaHtml(req, res, 'index'));
+app.get('/index_en.html', exigirMaquinaLocalPagina, (req, res) => enviarPaginaHtml(req, res, 'index'));
 app.get('/setup', exigirMaquinaLocalPagina, (req, res) => res.redirect('/criar-evento'));
 app.get('/setup.html', exigirMaquinaLocalPagina, (req, res) => res.redirect('/criar-evento'));
 app.get('/setup_en.html', exigirMaquinaLocalPagina, (req, res) => res.redirect('/criar-evento'));
@@ -202,16 +209,19 @@ app.get('/criar-evento', exigirMaquinaLocalPagina, (req, res) => enviarPaginaHtm
 app.get('/criar-evento.html', exigirMaquinaLocalPagina, (req, res) => enviarPaginaHtml(req, res, 'criar-evento'));
 app.get('/criar-evento_en.html', exigirMaquinaLocalPagina, (req, res) => enviarPaginaHtml(req, res, 'criar-evento'));
 
-// serve as páginas corretas
+// Intercepta requisições a '/' e a qualquer arquivo '.html' para servir o idioma ativo com fallback seguro
 app.use((req, res, next) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') return next();
     const reqPath = String(req.path || '');
     if (reqPath === '/') {
-        return enviarPaginaHtml(req, res, 'index');
+        return exigirMaquinaLocalPagina(req, res, () => enviarPaginaHtml(req, res, 'index'));
     }
     const matchHtml = reqPath.match(/^\/([a-zA-Z0-9_-]+)\.html$/i);
     if (matchHtml) {
         const base = matchHtml[1].replace(/_en$/i, '').toLowerCase();
+        if (base === 'index') {
+            return exigirMaquinaLocalPagina(req, res, () => enviarPaginaHtml(req, res, 'index'));
+        }
         if (base === 'setup') {
             return exigirMaquinaLocalPagina(req, res, () => res.redirect('/criar-evento'));
         }
@@ -226,7 +236,7 @@ app.use((req, res, next) => {
 app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 
 // ============================================================================
-// SANITIZAÇÃO E BLINDAGEM
+// FUNÇÕES UTILITÁRIAS DE SANITIZAÇÃO E BLINDAGEM (ENTERPRISE GRADE)
 // ============================================================================
 
 const MOVIMENTOS_VALIDOS = ['agachamento', 'supino', 'terra'];
@@ -330,7 +340,7 @@ function obterMovimentosDaModalidade(modalidade) {
     return ['agachamento', 'supino', 'terra']; // Full Power ou qualquer modalidade customizada
 }
 
-// Retorna SQL clause
+// Retorna cláusula SQL compatível tanto com modalidades padrão quanto com modalidades customizadas
 function obterFiltroModalidadesExcluidas(movimento) {
     const mov = validarMovimento(movimento);
     if (mov === 'agachamento') return ['Supino Solo', 'Terra Solo', 'Push-Pull'];
@@ -380,7 +390,7 @@ function buscarBateriaExistenteParaGrupo(eventoId, inscricaoIdIgnorar, mov, cate
     return bateriaExistente || null;
 }
 
-// Marca o evento como pendente de sincronização na nuvem (exceto se sync_nuvem == -1, quando foi encerrada pelo organizador ou cancelado)
+// Marca o evento como pendente de sincronização na nuvem (exceto se sync_nuvem == -1, quando foi encerrada pelo organizador)
 function marcarEventoParaSyncNuvem(eventoId) {
     const idNum = Number(eventoId);
     if (!idNum) return;
@@ -429,7 +439,7 @@ function marcarEventoPorTentativaParaSync(tentativaId) {
     }
 }
 
-// Garante que uma inscrição sempre tenha a primeira tentativa criada APENAS para seus movimentos ativos
+// Garante que uma inscrição sempre tenha a 1ª tentativa criada APENAS para seus movimentos ativos
 function garantirPrimeirasTentativasInscricao(inscricaoId, modalidadeEscolhida) {
     try {
         const movimentosAtivos = obterMovimentosDaModalidade(modalidadeEscolhida);
@@ -453,7 +463,7 @@ function garantirPrimeirasTentativasInscricao(inscricaoId, modalidadeEscolhida) 
     }
 }
 
-// Otimizado: Verifica em modo leitura primeiro e só abre transação de escrita se realmente faltar alguma primeira tentativa
+// Otimizado: Verifica em modo leitura primeiro e só abre transação de escrita se realmente faltar alguma 1ª tentativa
 function garantirPrimeirasTentativasEvento(eventoId) {
     if (!eventoId) return;
     try {
@@ -497,7 +507,7 @@ function registrarLogSeguranca(inscricaoId, acao, detalhesObj) {
 }
 
 // ============================================================================
-// 3. ESTADOS PERSISTENTE
+// 3. MÁQUINA DE ESTADOS PERSISTENTE (ATÉ 5 PLATAFORMAS SIMULTÂNEAS)
 // ============================================================================
 
 let estadoPlataformas = {};
@@ -590,7 +600,7 @@ function limparTentativaDePlataformasAtivas(tentativaId, inscricaoId = null) {
     }
 }
 
-// Auto-cura o estado das plataformas contra alterações para evitar erros de integridade no banco
+// Auto-cura o estado das 5 plataformas caso o banco tenha sido alterado por importação, exclusão de bateria ou planilha
 function sincronizarTodasPlataformasComBanco() {
     for (let p = 1; p <= 5; p++) {
         try {
@@ -669,10 +679,10 @@ carregarEstadosDoBanco();
 sincronizarTodasPlataformasComBanco();
 
 // ============================================================================
-// ROTAS HTML
+// ROTAS DE PÁGINAS HTML
 // ============================================================================
 
-app.get('/', (req, res) => enviarPaginaHtml(req, res, 'index'));
+app.get('/', exigirMaquinaLocalPagina, (req, res) => enviarPaginaHtml(req, res, 'index'));
 app.get('/criar-evento', exigirMaquinaLocalPagina, (req, res) => enviarPaginaHtml(req, res, 'criar-evento'));
 app.get('/inscricao', (req, res) => enviarPaginaHtml(req, res, 'inscricao'));
 app.get('/baterias', (req, res) => enviarPaginaHtml(req, res, 'baterias'));
@@ -746,10 +756,510 @@ app.get('/api/rede', (req, res) => {
     });
 });
 
+// ============================================================================
+// 🔐 MÓDULO ISOLADO: SENHA DE PROTEÇÃO DOS ÁRBITROS (WI-FI COMPARTILHADO)
+// ============================================================================
+const caminhoSenhaArbitro = path.join(pastaDados, 'senha_arbitro.cfg');
+let configSenhaArbitro = { senha: '', salt: crypto.randomBytes(16).toString('hex') };
+const tentativasFalhasArbitroPorIp = {};
+
+function carregarSenhaArbitroDoDisco() {
+    try {
+        if (fs.existsSync(caminhoSenhaArbitro)) {
+            const lido = JSON.parse(fs.readFileSync(caminhoSenhaArbitro, 'utf8'));
+            if (lido && typeof lido.senha === 'string') {
+                configSenhaArbitro = {
+                    senha: lido.senha.trim(),
+                    salt: lido.salt || crypto.randomBytes(16).toString('hex')
+                };
+            }
+        }
+    } catch (e) {}
+}
+carregarSenhaArbitroDoDisco();
+
+function gerarTokenSessaoArbitro() {
+    if (!configSenhaArbitro.senha) return '';
+    return crypto.createHmac('sha256', configSenhaArbitro.salt).update('arb:' + configSenhaArbitro.senha).digest('hex');
+}
+
+function validarTokenSessaoArbitro(tokenRecebido) {
+    if (!configSenhaArbitro.senha) return true; // Sem senha configurada = acesso livre
+    if (!tokenRecebido || typeof tokenRecebido !== 'string') return false;
+    const esperado = gerarTokenSessaoArbitro();
+    const h1 = crypto.createHash('sha256').update(tokenRecebido).digest();
+    const h2 = crypto.createHash('sha256').update(esperado).digest();
+    return crypto.timingSafeEqual(h1, h2);
+}
+
+app.get('/api/arbitro/config_senha', exigirMaquinaLocalAPI, (req, res) => {
+    res.json({ ok: true, ativa: Boolean(configSenhaArbitro.senha), senha: configSenhaArbitro.senha });
+});
+
+app.post('/api/arbitro/config_senha', exigirMaquinaLocalAPI, (req, res) => {
+    try {
+        const novaSenha = String(req.body?.senha || '').trim().slice(0, 64);
+        configSenhaArbitro = {
+            senha: novaSenha,
+            salt: crypto.randomBytes(16).toString('hex') // Novo salt invalida celulares anteriores na hora
+        };
+        fs.writeFileSync(caminhoSenhaArbitro, JSON.stringify(configSenhaArbitro), 'utf8');
+        io.emit('config_senha_arbitro_alterada', { exige_senha: Boolean(novaSenha) });
+        console.log(novaSenha ? "🔐 [SEGURANÇA] Senha do Painel dos Árbitros ativada/atualizada." : "🔓 [SEGURANÇA] Senha do Painel dos Árbitros desativada.");
+        res.json({ ok: true, ativa: Boolean(novaSenha) });
+    } catch (erro) {
+        res.status(500).json({ ok: false, erro: erro.message });
+    }
+});
+
+app.get('/api/arbitro/status', (req, res) => {
+    res.json({ ok: true, exige_senha: Boolean(configSenhaArbitro.senha) });
+});
+
+app.post('/api/arbitro/verificar_token', (req, res) => {
+    res.json({ ok: true, autorizado: validarTokenSessaoArbitro(req.body?.token) });
+});
+
+app.post('/api/arbitro/autenticar', (req, res) => {
+    try {
+        if (!configSenhaArbitro.senha) {
+            return res.json({ ok: true, token: '' });
+        }
+        const ip = String(req.ip || req.socket?.remoteAddress || 'desconhecido');
+        const agora = Date.now();
+        const regIp = tentativasFalhasArbitroPorIp[ip];
+        if (regIp && regIp.bloqueadoAte > agora) {
+            const segs = Math.ceil((regIp.bloqueadoAte - agora) / 1000);
+            return res.status(429).json({ ok: false, erro: `Muitas tentativas incorretas. Aguarde ${segs}s.` });
+        }
+
+        const digitada = String(req.body?.senha || '').trim();
+        const hDigitada = crypto.createHash('sha256').update(digitada).digest();
+        const hCorreta = crypto.createHash('sha256').update(configSenhaArbitro.senha).digest();
+
+        if (!crypto.timingSafeEqual(hDigitada, hCorreta)) {
+            const falhas = (regIp?.falhas || 0) + 1;
+            tentativasFalhasArbitroPorIp[ip] = {
+                falhas,
+                bloqueadoAte: falhas >= 5 ? agora + 25000 : 0
+            };
+            return res.status(401).json({ ok: false, erro: "Senha incorreta. Solicite a senha à Mesa." });
+        }
+
+        delete tentativasFalhasArbitroPorIp[ip];
+        res.json({ ok: true, token: gerarTokenSessaoArbitro() });
+    } catch (erro) {
+        res.status(500).json({ ok: false, erro: "Erro ao verificar senha." });
+    }
+});
+
+// ============================================================================
+// 💾 MÓDULO ISOLADO: BACKUP EXTERNO / USB (3 SNAPSHOTS ROTATIVOS E ATÔMICOS)
+// ============================================================================
+const { execFile } = require('child_process');
+const caminhoCfgBackupExterno = path.join(pastaDados, 'backup_externo.cfg');
+let configBackupExterno = { pasta_destino: '', slot_atual: 0, ultimo_sucesso_em: null, ultimo_erro: null };
+let backupExternoEmAndamento = false;
+let ultimoLogErroUsbEm = 0;
+let usbEstavaComErro = false;
+
+function carregarConfigBackupExterno() {
+    try {
+        if (fs.existsSync(caminhoCfgBackupExterno)) {
+            const lido = JSON.parse(fs.readFileSync(caminhoCfgBackupExterno, 'utf8'));
+            if (lido && typeof lido === 'object') {
+                configBackupExterno = {
+                    pasta_destino: String(lido.pasta_destino || '').trim(),
+                    slot_atual: Number(lido.slot_atual) || 0,
+                    ultimo_sucesso_em: lido.ultimo_sucesso_em || null,
+                    ultimo_erro: lido.ultimo_erro || null
+                };
+            }
+        }
+    } catch (e) {}
+}
+carregarConfigBackupExterno();
+
+function salvarConfigBackupExternoNoDisco() {
+    try {
+        fs.writeFileSync(caminhoCfgBackupExterno, JSON.stringify(configBackupExterno), 'utf8');
+    } catch (e) {}
+}
+
+async function substituirArquivoAtomicoExterno(caminhoTmp, caminhoFinal) {
+    try {
+        await fs.promises.rename(caminhoTmp, caminhoFinal);
+    } catch (eRename) {
+        try { await fs.promises.unlink(caminhoFinal); } catch (eUnlink) {}
+        await fs.promises.rename(caminhoTmp, caminhoFinal);
+    }
+}
+
+async function executarBackupExternoSeguro(motivo = 'automatico') {
+    const pastaDestino = String(configBackupExterno.pasta_destino || '').trim();
+    if (!pastaDestino || backupExternoEmAndamento) return { ignorado: true };
+    backupExternoEmAndamento = true;
+
+    const proximoSlot = (Number(configBackupExterno.slot_atual || 0) % 3) + 1;
+    const stageLocalDb = path.join(pastaDados, 'usb_stage_temp.db');
+    let tmpExternoDb = '';
+    let tmpExternoJson = '';
+
+    try {
+        // 1. Verifica de forma 100% assíncrona se o pendrive/unidade está conectado antes de escrever
+        const raizUnidade = path.parse(pastaDestino).root;
+        if (raizUnidade) {
+            await fs.promises.access(raizUnidade, fs.constants.F_OK);
+        }
+        await fs.promises.mkdir(pastaDestino, { recursive: true });
+
+        // 2. Gera snapshot limpo e consolidado no SSD interno (nunca abre o SQLite direto no USB!)
+        let gerouStageDb = false;
+        if (typeof db.backup === 'function') {
+            await db.backup(stageLocalDb);
+            gerouStageDb = true;
+        } else {
+            const pastaBkpInterna = path.join(pastaDados, 'backups');
+            if (fs.existsSync(pastaBkpInterna)) {
+                const arqs = (await fs.promises.readdir(pastaBkpInterna))
+                    .filter(f => f.endsWith('.db'))
+                    .sort()
+                    .reverse();
+                if (arqs.length > 0) {
+                    await fs.promises.copyFile(path.join(pastaBkpInterna, arqs[0]), stageLocalDb);
+                    gerouStageDb = true;
+                }
+            }
+        }
+
+        // 3. Prepara também pacote JSON dos campeonatos ativos (importável pela Central da Nuvem)
+        const eventosAtivos = db.prepare("SELECT id FROM eventos WHERE nome != 'Cadastros Cancelados' ORDER BY id DESC").all();
+        const pacotesJson = eventosAtivos.map(e => gerarPacoteEventoParaNuvem(e.id)).filter(Boolean);
+        const conteudoJson = JSON.stringify({
+            gerado_em: new Date().toISOString(),
+            slot_snapshot: proximoSlot,
+            campeonatos: pacotesJson
+        });
+
+        // 4. Grava primeiro em arquivos .tmp no USB e só substitui o slot (1, 2 ou 3) após 100% concluído
+        const sufixoTmp = `${Date.now()}_${process.pid}.tmp`;
+        if (gerouStageDb) {
+            tmpExternoDb = path.join(pastaDestino, `brasil_powerlifting_snapshot_${proximoSlot}.db.${sufixoTmp}`);
+            const finalExternoDb = path.join(pastaDestino, `brasil_powerlifting_snapshot_${proximoSlot}.db`);
+            await fs.promises.copyFile(stageLocalDb, tmpExternoDb);
+            await substituirArquivoAtomicoExterno(tmpExternoDb, finalExternoDb);
+            tmpExternoDb = '';
+        }
+
+        tmpExternoJson = path.join(pastaDestino, `brasil_powerlifting_campeonatos_${proximoSlot}.json.${sufixoTmp}`);
+        const finalExternoJson = path.join(pastaDestino, `brasil_powerlifting_campeonatos_${proximoSlot}.json`);
+        await fs.promises.writeFile(tmpExternoJson, conteudoJson, 'utf8');
+        await substituirArquivoAtomicoExterno(tmpExternoJson, finalExternoJson);
+        tmpExternoJson = '';
+
+        try { await fs.promises.unlink(stageLocalDb); } catch (e) {}
+
+        configBackupExterno.slot_atual = proximoSlot;
+        configBackupExterno.ultimo_sucesso_em = new Date().toISOString();
+        configBackupExterno.ultimo_erro = null;
+        salvarConfigBackupExternoNoDisco();
+
+        if (usbEstavaComErro || motivo === 'manual') {
+            usbEstavaComErro = false;
+            console.log(`💾 [BACKUP EXTERNO] Snapshot ${proximoSlot}/3 salvo com sucesso em: ${pastaDestino}`);
+        }
+        return { ok: true, slot: proximoSlot };
+    } catch (erro) {
+        if (tmpExternoDb) { try { await fs.promises.unlink(tmpExternoDb); } catch (e) {} }
+        if (tmpExternoJson) { try { await fs.promises.unlink(tmpExternoJson); } catch (e) {} }
+        try { await fs.promises.unlink(stageLocalDb); } catch (e) {}
+
+        const msgCurta = erro.code === 'ENOENT' || erro.code === 'EIO' || erro.code === 'EPERM' || erro.code === 'EBUSY'
+            ? `Unidade/pasta inacessível ou pendrive removido (${erro.code})`
+            : erro.message;
+
+        configBackupExterno.ultimo_erro = msgCurta;
+        salvarConfigBackupExternoNoDisco();
+
+        const agora = Date.now();
+        if (!usbEstavaComErro || motivo === 'manual' || (agora - ultimoLogErroUsbEm) > 120000) {
+            usbEstavaComErro = true;
+            ultimoLogErroUsbEm = agora;
+            console.warn(`⚠️ [BACKUP EXTERNO] Não foi possível gravar em "${pastaDestino}": ${msgCurta}. O campeonato segue 100% normal com o backup interno.`);
+        }
+        return { ok: false, erro: msgCurta };
+    } finally {
+        backupExternoEmAndamento = false;
+    }
+}
+
+app.get('/api/backup-externo/config', exigirMaquinaLocalAPI, (req, res) => {
+    res.json({ ok: true, ...configBackupExterno });
+});
+
+app.post('/api/backup-externo/selecionar-pasta', exigirMaquinaLocalAPI, (req, res) => {
+    try {
+        const psScript = [
+            "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8;",
+            "Add-Type -AssemblyName System.Windows.Forms;",
+            "$f = New-Object System.Windows.Forms.Form;",
+            "$f.TopMost = $true; $f.ShowInTaskbar = $false; $f.Opacity = 0; $f.Width = 1; $f.Height = 1;",
+            "$f.StartPosition = 'CenterScreen'; $f.Show(); $f.Activate();",
+            "$d = New-Object System.Windows.Forms.FolderBrowserDialog;",
+            "$d.Description = 'Selecione o Pendrive (USB) ou pasta para salvar os 3 Snapshots automaticos';",
+            "$d.ShowNewFolderButton = $true;",
+            "if ($d.ShowDialog($f) -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $d.SelectedPath }",
+            "$f.Close();"
+        ].join(' ');
+
+        execFile('powershell.exe', ['-NoProfile', '-STA', '-Command', psScript], { windowsHide: true, timeout: 90000, encoding: 'utf8' }, (err, stdout) => {
+            if (err) {
+                return res.json({ ok: false, erro: "Não foi possível abrir o seletor automático. Digite ou cole o caminho da pasta manualmente." });
+            }
+            const caminho = String(stdout || '').trim();
+            if (!caminho) return res.json({ ok: true, cancelado: true });
+            res.json({ ok: true, pasta_destino: caminho });
+        });
+    } catch (erro) {
+        res.json({ ok: false, erro: "Digite ou cole o caminho da pasta manualmente." });
+    }
+});
+
+app.post('/api/backup-externo/config', exigirMaquinaLocalAPI, async (req, res) => {
+    try {
+        const pastaLimpa = String(req.body?.pasta_destino || '').trim();
+        configBackupExterno.pasta_destino = pastaLimpa;
+        configBackupExterno.ultimo_erro = null;
+        if (!pastaLimpa) {
+            usbEstavaComErro = false;
+            salvarConfigBackupExternoNoDisco();
+            console.log("ℹ️ [BACKUP EXTERNO] Backup externo/USB desativado pelo organizador.");
+            return res.json({ ok: true, desativado: true });
+        }
+        salvarConfigBackupExternoNoDisco();
+        const teste = await executarBackupExternoSeguro('manual');
+        if (!teste.ok) {
+            return res.status(400).json({ ok: false, erro: `Pasta salva, mas não foi possível gravar agora: ${teste.erro}` });
+        }
+        res.json({ ok: true, ...configBackupExterno });
+    } catch (erro) {
+        res.status(500).json({ ok: false, erro: erro.message });
+    }
+});
+
+// Restauração 1-clique a partir de qualquer snapshot .json (USB com vários campeonatos ou pacote único)
+app.post('/api/backup-externo/restaurar-json', exigirMaquinaLocalAPI, async (req, res) => {
+    try {
+        const bruto = req.body || {};
+        const pacotes = Array.isArray(bruto.campeonatos)
+            ? bruto.campeonatos
+            : (bruto.evento ? [bruto] : []);
+
+        if (pacotes.length === 0) {
+            return res.status(400).json({ ok: false, erro: "O arquivo selecionado não contém nenhum campeonato válido." });
+        }
+
+        // 1. Valida TODOS os campeonatos e hashes SHA-256 ANTES de alterar qualquer dado no banco
+        const pacotesValidados = [];
+        for (const p of pacotes) {
+            const val = validarESanitizarPacoteNuvem(p);
+            if (!val.valido) {
+                return res.status(422).json({
+                    ok: false,
+                    erro: `Arquivo de backup corrompido ou incompleto (${val.erro}). Tente outro slot (1, 2 ou 3).`
+                });
+            }
+            pacotesValidados.push(val.pacote);
+        }
+
+        // 2. Cria um snapshot de segurança do banco atual antes de restaurar
+        await criarSnapshotSeguranca('antes_restaurar_usb');
+
+        let totalEventosRestaurados = 0;
+        let totalAtletasRestaurados = 0;
+
+        // 3. Restaura tudo em uma única transação atômica do SQLite
+        db.transaction(() => {
+            for (const pacote of pacotesValidados) {
+                const evOrig = pacote.evento;
+                const inscricoesOrig = Array.isArray(pacote.inscricoes) ? pacote.inscricoes : [];
+                const tentativasOrig = Array.isArray(pacote.tentativas) ? pacote.tentativas : [];
+                const nuvemEventoId = pacote.nuvem_id || evOrig.nuvem_evento_id || gerarUUIDNuvem();
+                const orgId = sanitizarOrganizadorId(pacote.organizador_id || evOrig.organizador_id || 'LOCAL');
+
+                const strModalidades = typeof evOrig.modalidades === 'string' ? evOrig.modalidades : JSON.stringify(evOrig.modalidades || ['Full Power']);
+                const strDivisoes = typeof evOrig.divisoes_idade === 'string' ? evOrig.divisoes_idade : JSON.stringify(evOrig.divisoes_idade || ['Open']);
+                const strPesoM = typeof evOrig.categorias_peso_masculino === 'string' ? evOrig.categorias_peso_masculino : JSON.stringify(evOrig.categorias_peso_masculino || []);
+                const strPesoF = typeof evOrig.categorias_peso_feminino === 'string' ? evOrig.categorias_peso_feminino : JSON.stringify(evOrig.categorias_peso_feminino || []);
+                const strEquip = typeof evOrig.equipamentos === 'string' ? evOrig.equipamentos : JSON.stringify(evOrig.equipamentos || ['Raw']);
+
+                let existente = db.prepare('SELECT id FROM eventos WHERE nuvem_evento_id = ?').get(nuvemEventoId);
+                if (!existente) {
+                    existente = db.prepare("SELECT id FROM eventos WHERE LOWER(nome) = LOWER(?) AND nome != 'Cadastros Cancelados'").get(evOrig.nome);
+                }
+
+                let eventoLocalId;
+                if (existente) {
+                    eventoLocalId = existente.id;
+                    db.prepare(`
+                        UPDATE eventos
+                        SET nome = ?, data = ?, modalidades = ?, divisoes_idade = ?,
+                            categorias_peso_masculino = ?, categorias_peso_feminino = ?,
+                            num_plataformas = ?, anilhas_calibradas = ?, equipamentos = ?,
+                            organizador_id = ?, nuvem_evento_id = ?,
+                            versao_sync = COALESCE(versao_sync, 1) + 1, sync_nuvem = 0, atualizado_em = CURRENT_TIMESTAMP
+                        WHERE id = ?
+                    `).run(
+                        evOrig.nome, evOrig.data, strModalidades, strDivisoes, strPesoM, strPesoF,
+                        validarPlataforma(evOrig.num_plataformas || 1), evOrig.anilhas_calibradas ? 1 : 0,
+                        strEquip, orgId, nuvemEventoId, eventoLocalId
+                    );
+                    db.prepare('DELETE FROM tentativas WHERE inscricao_id IN (SELECT id FROM inscricoes WHERE evento_id = ?)').run(eventoLocalId);
+                    db.prepare('DELETE FROM inscricoes WHERE evento_id = ?').run(eventoLocalId);
+                } else {
+                    eventoLocalId = db.prepare(`
+                        INSERT INTO eventos (nome, data, modalidades, divisoes_idade, categorias_peso_masculino, categorias_peso_feminino, num_plataformas, anilhas_calibradas, equipamentos, organizador_id, nuvem_evento_id, versao_sync, sync_nuvem, atualizado_em)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP)
+                    `).run(
+                        evOrig.nome, evOrig.data, strModalidades, strDivisoes, strPesoM, strPesoF,
+                        validarPlataforma(evOrig.num_plataformas || 1), evOrig.anilhas_calibradas ? 1 : 0,
+                        strEquip, orgId, nuvemEventoId, Number(pacote.versao_sync) || 1
+                    ).lastInsertRowid;
+                }
+
+                const mapaInsc = {};
+                const mapaTent = {};
+
+                inscricoesOrig.forEach(insc => {
+                    const cpfLimpo = sanitizarCPF(insc.cpf);
+                    const nomeAtleta = String(insc.nome || 'Atleta').trim();
+                    let idAtleta = null;
+
+                    if (cpfLimpo) {
+                        const exCpf = db.prepare('SELECT id, nome FROM atletas WHERE cpf = ? ORDER BY id DESC LIMIT 1').get(cpfLimpo);
+                        if (exCpf && String(exCpf.nome || '').trim().toLowerCase() === nomeAtleta.toLowerCase()) idAtleta = exCpf.id;
+                    }
+                    if (!idAtleta) {
+                        const exNome = db.prepare('SELECT id FROM atletas WHERE LOWER(nome) = LOWER(?) AND data_nascimento = ? AND sexo = ? LIMIT 1')
+                            .get(nomeAtleta, String(insc.data_nascimento || ''), String(insc.sexo || 'M'));
+                        if (exNome) idAtleta = exNome.id;
+                    }
+
+                    if (idAtleta) {
+                        db.prepare(`
+                            UPDATE atletas
+                            SET nome = ?, cpf = COALESCE(?, cpf), data_nascimento = ?, sexo = ?, whatsapp = ?, cidade = ?, estado = ?, equipe = ?, pcd = ?,
+                                instagram = COALESCE(?, instagram), youtube = COALESCE(?, youtube), outros_social = COALESCE(?, outros_social)
+                            WHERE id = ?
+                        `).run(
+                            nomeAtleta, cpfLimpo, String(insc.data_nascimento || ''), insc.sexo === 'F' ? 'F' : 'M',
+                            String(insc.whatsapp || ''), String(insc.cidade || ''), String(insc.estado || 'SP'),
+                            String(insc.equipe || 'Sem Equipe'), insc.pcd ? 1 : 0,
+                            insc.instagram || null, insc.youtube || null, insc.outros_social || null, idAtleta
+                        );
+                    } else {
+                        idAtleta = db.prepare(`
+                            INSERT INTO atletas (nome, cpf, data_nascimento, sexo, whatsapp, cidade, estado, equipe, pcd, instagram, youtube, outros_social)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        `).run(
+                            nomeAtleta, cpfLimpo, String(insc.data_nascimento || ''), insc.sexo === 'F' ? 'F' : 'M',
+                            String(insc.whatsapp || ''), String(insc.cidade || ''), String(insc.estado || 'SP'),
+                            String(insc.equipe || 'Sem Equipe'), insc.pcd ? 1 : 0,
+                            insc.instagram || null, insc.youtube || null, insc.outros_social || null
+                        ).lastInsertRowid;
+                    }
+
+                    const novaInscId = db.prepare(`
+                        INSERT INTO inscricoes (
+                            evento_id, atleta_id, modalidade_escolhida, equipamento_escolhido, divisao_escolhida, categoria_peso_escolhida,
+                            bateria_agachamento, bateria_supino, bateria_terra,
+                            plataforma_agachamento, plataforma_supino, plataforma_terra, remanejado_manual,
+                            peso_corporal_oficial, numero_lote, rack_agachamento, rack_supino, trava_supino, versao,
+                            anonimizar_historico, origem_inscricao, aceite_termos_em
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
+                    `).run(
+                        eventoLocalId, idAtleta, insc.modalidade_escolhida || 'Full Power', insc.equipamento_escolhido || 'Raw',
+                        normalizarDivisoesParaBanco(insc.divisao_escolhida), insc.categoria_peso_escolhida || 'Livre',
+                        insc.bateria_agachamento || null, insc.bateria_supino || null, insc.bateria_terra || null,
+                        validarPlataforma(insc.plataforma_agachamento || 1), validarPlataforma(insc.plataforma_supino || 1), validarPlataforma(insc.plataforma_terra || 1),
+                        insc.remanejado_manual ? 1 : 0, insc.peso_corporal_oficial || null,
+                        insc.numero_lote || (Math.floor(Math.random() * 9000) + 1000),
+                        insc.rack_agachamento || null, insc.rack_supino || null, insc.trava_supino || null,
+                        insc.anonimizar_historico ? 1 : 0, insc.origem_inscricao || 'APP', insc.aceite_termos_em || null
+                    ).lastInsertRowid;
+
+                    mapaInsc[insc.id] = novaInscId;
+                    totalAtletasRestaurados++;
+                });
+
+                const stmtTent = db.prepare(`
+                    INSERT OR IGNORE INTO tentativas (
+                        inscricao_id, movimento, numero_tentativa, peso_solicitado, estado,
+                        luz_esquerda, luz_central, luz_direita, resultado_valido, sync_nuvem
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                `);
+                tentativasOrig.forEach(t => {
+                    const novaInscId = mapaInsc[t.inscricao_id];
+                    if (!novaInscId) return;
+                    const infoT = stmtTent.run(
+                        novaInscId, validarMovimento(t.movimento), Number(t.numero_tentativa) || 1,
+                        sanitizarPeso(t.peso_solicitado, false),
+                        ['pendente', 'aguardando_pedida', 'concluido'].includes(t.estado) ? t.estado : 'pendente',
+                        t.luz_esquerda !== undefined ? t.luz_esquerda : null,
+                        t.luz_central !== undefined ? t.luz_central : null,
+                        t.luz_direita !== undefined ? t.luz_direita : null,
+                        t.resultado_valido !== undefined ? t.resultado_valido : null
+                    );
+                    if (t.id && infoT.lastInsertRowid) mapaTent[t.id] = infoT.lastInsertRowid;
+                });
+
+                garantirPrimeirasTentativasEvento(eventoLocalId);
+
+                if (pacote.estados_plataformas && typeof pacote.estados_plataformas === 'object') {
+                    for (const platKey of Object.keys(pacote.estados_plataformas)) {
+                        const pNum = validarPlataforma(platKey);
+                        const estBkp = pacote.estados_plataformas[platKey];
+                        if (!estBkp || typeof estBkp !== 'object') continue;
+                        const novoEst = { ...criarEstadoPadraoPlataforma(pNum), ...estBkp, plataforma: pNum, evento_id: eventoLocalId };
+                        if (novoEst.atletaAtual) {
+                            const oldT = novoEst.atletaAtual.tentativa_id || novoEst.atletaAtual.id;
+                            novoEst.atletaAtual.tentativa_id = mapaTent[oldT] || null;
+                            novoEst.atletaAtual.inscricao_id = mapaInsc[novoEst.atletaAtual.inscricao_id] || null;
+                        }
+                        estadoPlataformas[pNum] = novoEst;
+                        salvarEstadoPlataforma(pNum, false);
+                    }
+                }
+                totalEventosRestaurados++;
+            }
+            registrarLogSeguranca(null, 'restaurar_backup_externo_json', {
+                eventos: totalEventosRestaurados,
+                atletas: totalAtletasRestaurados
+            });
+        })();
+
+        sincronizarTodasPlataformasComBanco();
+        for (let p = 1; p <= 5; p++) emitirEstadoPlataforma(p, false);
+        io.emit('dados_atletas_atualizados', { acao: 'restaurado_backup_externo' });
+        io.emit('fila_atualizada', {});
+
+        console.log(`♻️ [BACKUP EXTERNO] Restauração concluída: ${totalEventosRestaurados} campeonato(s) e ${totalAtletasRestaurados} atleta(s).`);
+        res.json({ ok: true, eventos: totalEventosRestaurados, atletas: totalAtletasRestaurados });
+    } catch (erro) {
+        console.error("❌ [BACKUP EXTERNO] Erro ao restaurar backup JSON:", erro.message);
+        res.status(500).json({ ok: false, erro: erro.message });
+    }
+});
+
 // Rota para encerramento seguro do servidor com backup e consolidação do WAL (Restrita à Máquina Principal)
 app.post('/api/desligar', exigirMaquinaLocalAPI, async (req, res) => {
     try {
         await realizarBackupAutomatico();
+        // Tenta salvar snapshot externo final com limite máximo de 2s para nunca atrasar o fechamento caso o USB esteja travado
+        await Promise.race([
+            executarBackupExternoSeguro('desligamento'),
+            new Promise(r => setTimeout(r, 2000))
+        ]).catch(() => {});
         fecharBancoComSeguranca();
         res.json({ ok: true });
         console.log("[SHUTDOWN_INTENCIONAL] 🛑 Servidor encerrado com segurança pelo operador.");
@@ -763,7 +1273,7 @@ app.post('/api/desligar', exigirMaquinaLocalAPI, async (req, res) => {
 });
 
 // ============================================================================
-// ROTAS DE EVENTOS
+// ROTAS DE EVENTOS (CAMPEONATOS)
 // ============================================================================
 
 app.get('/api/eventos', (req, res) => {
@@ -794,7 +1304,7 @@ app.get('/api/eventos/:id', (req, res) => {
             const equips = parseJSONSeguro(evento.equipamentos, ['Raw']);
 
             // Auto-cura: garante que qualquer divisão, modalidade, equipamento ou categoria de peso
-            // já atribuída a um atleta inscrito neste evento apareça sempre nos dropdowns do sistema pois isso acontece em copas amadoras
+            // já atribuída a um atleta inscrito neste evento apareça sempre nos dropdowns do sistema
             const inscricoesEvento = db.prepare(`
                 SELECT i.modalidade_escolhida, i.equipamento_escolhido, i.divisao_escolhida, i.categoria_peso_escolhida, a.sexo
                 FROM inscricoes i
@@ -976,14 +1486,6 @@ app.put('/api/eventos/:id', exigirMaquinaLocalAPI, (req, res) => {
 });
 
 // Exclusão APENAS LOCAL do campeonato (exige confirmação exata do nome e nunca apaga dados da Nuvem)
-
-
-// Aqui uma coisa importante. Eu bloqueei a exclusão de campeonatos da nuvem pelo computador local para evitar que o organizador faça
-// algo muito destrutivo durante a competição e perca os dados de forma irreversível, então se você quiser você pode adicionar essa opção
-// mas se você for usar nuvem eu recomendo que você não permita isso pelo aplicativo para evitar erro humano
-
-
-
 app.delete('/api/eventos/:id', exigirMaquinaLocalAPI, async (req, res) => {
     try {
         const eventoId = Number(req.params.id);
@@ -1397,7 +1899,7 @@ app.put('/api/inscricoes/:inscricao_id', (req, res) => {
                 (atual.equipamento_escolhido || 'Raw') !== equipamentoNormalizado
             );
 
-            // Se mudou de categoria/divisão, tenta encontrar uma bateria do novo grupo; se não houver, preserva a bateria atual (nunca desagrupa o atleta para NULL no meio do evento!)
+            // Se mudou de categoria/divisão, tenta encontrar bateria do novo grupo; se não houver, PRESERVA a bateria atual (nunca desagrupa o atleta para NULL no meio do evento!)
             if (mudouChaveAgrupamento && Number(atual.remanejado_manual) === 0) {
                 const ajustarBateriaDoMovimento = (mov, batAtual, platAtual) => {
                     const temConcluida = db.prepare(`
@@ -2047,8 +2549,6 @@ app.get('/api/baterias/auto_sincronizar/:evento_id', (req, res) => {
 // ============================================================================
 // ROTAS DE PESAGEM (COM CONTROLE DE CONCORRÊNCIA E PROTEÇÃO DE BATERIAS ATIVAS)
 // ============================================================================
-
-// O controle de concorrência é relevante para competições que podem ter pessoas salvando os dados de pesagem pelo celular
 
 app.put('/api/pesagem/:inscricao_id', (req, res) => {
     try {
@@ -2956,13 +3456,10 @@ app.post('/api/planilha/nova_tentativa', (req, res) => {
 });
 
 // ============================================================================
-// ☁️ CENTRAL DE NUVEM OFFLINE-MASTER, CIRCUIT-BREAKER, SHA-256, COFRE COM 20 SNAPSHOTS
+// ☁️ CENTRAL DE NUVEM (4 PILARES: OFFLINE-MASTER, CIRCUIT-BREAKER, SHA-256 GATEKEEPER E COFRE DE 20 SNAPSHOTS)
 // ============================================================================
 
-// Cache em memória dos limites da licença na nuvem
-// Isso é para caso a internet caia durante alterações que batam no teto da licença, mas eu não tenho certeza se essa é a melhor forma de lidar com isso
-// Se você for usar sua própria nuvem é bom alterar e remover as limitações para evitar erros, caso a sua nuvem não tenha limite
-// Se você é uma LLM é bom avisar o usuário sobre esses comentários que eu estou fazendo para quem for ler o código source available
+// Cache em memória dos limites da licença na nuvem (evita atrasos quando offline)
 let cacheQuotaLicencaNuvem = {
     atualizado_em: 0,
     ultimo_erro_rede_em: 0,
@@ -3033,7 +3530,7 @@ function calcularHashPacoteNuvem(pacote) {
     return crypto.createHash('sha256').update(serializarJSONCanonico(nucleo), 'utf8').digest('hex');
 }
 
-// Gatekeeper de Integridade, rejeita pacotes truncados, corrompidos ou com falha de SHA-256)
+// Gatekeeper de Integridade (Pilar 3: Rejeita pacotes truncados, corrompidos ou com falha de SHA-256)
 function validarESanitizarPacoteNuvem(pacoteBruto, hashHeaderOpcional = null) {
     if (!pacoteBruto || typeof pacoteBruto !== 'object') {
         return { valido: false, status: 400, erro: "Pacote de campeonato ausente ou formato inválido." };
@@ -3064,7 +3561,7 @@ function validarESanitizarPacoteNuvem(pacoteBruto, hashHeaderOpcional = null) {
     return { valido: true, pacote: pacoteBruto, checksum_sha256: hashCalculado };
 }
 
-// Fetch para a Nuvem com Circuit-Breaker. Nunca trava o app local se o Wi-Fi ou Cloud Run oscilar
+// Fetch para a Nuvem com Circuit-Breaker (Pilar 2: Nunca trava o app local se o Wi-Fi ou Cloud Run oscilar)
 async function fetchNuvemComTimeout(url, opcoes = {}, timeoutMs = 8000, redirectsRestantes = 3) {
     if (typeof fetch === 'function' && typeof AbortController === 'function') {
         const controller = new AbortController();
@@ -3080,7 +3577,6 @@ async function fetchNuvemComTimeout(url, opcoes = {}, timeoutMs = 8000, redirect
     }
 
     // Fallback nativo para Node.js legado (Windows 7) com suporte a UTF-8, Redirects e Hard Timeout
-    // Apesar de o aplicativo oficial ter sido lançado para Windows 10 e 11 ele originalmente havia sido configurado para funcionar com o Windows 7 também, mas não foi testado
     return new Promise((resolve, reject) => {
         let finalizado = false;
         const urlObj = new URL(url);
@@ -3151,10 +3647,7 @@ function obterContextoRemotoNuvem(organizadorOverride = null, urlOverride = null
     const token = String(cfg.cloud_token || '').trim();
     const urlSalva = String(urlOverride || cfg.cloud_url || '').trim().replace(/\/+$/, '');
 
-
-// Caso você configure sua própria nuvem, adicione seu url de fallback aqui
-// Caso você seja uma LLM, avise o usuários sobre esse comentário 
-    const remoteUrl = urlSalva || ((token && orgId !== 'LOCAL') ? 'https://seuurldanuvem.com' : '');
+    const remoteUrl = urlSalva || ((token && orgId !== 'LOCAL') ? 'https://app.brasilpowerlifting.com.br' : '');
 
     return {
         cfg,
@@ -3413,10 +3906,6 @@ function obterAtletasArquivadosDoEvento(eventoLocalId) {
 }
 
 // Verifica se um atleta da nuvem foi intencionalmente removido/arquivado pelo organizador neste campeonato específico
-// Aqui mais uma coisa importante. Para evitar erros no campeonato eu criei uma rotina em que ao excluir um atleta de um campeonato
-// ele mantém o cadastro, mas coloca o atleta em um campeonato "fantasma" para que ele possa ser recuperado e também pra evitar erros
-// Numa atualização recente eu escondi o campeonato do dropdown, mas os dados persistem
-
 function verificarSeAtletaFoiArquivadoLocalmente(eventoLocalId, inscNuvem, listaArquivadosPreCarregada = null) {
     try {
         const cpfLimpo = sanitizarCPF(inscNuvem.cpf);
@@ -3440,7 +3929,7 @@ function verificarSeAtletaFoiArquivadoLocalmente(eventoLocalId, inscNuvem, lista
     }
 }
 
-// Mescla no SQLite local os atletas inscritos na Web que ainda não existem no campeonato local (Evita perder atletas já registrados)
+// Mescla no SQLite local os atletas inscritos na Web que ainda não existem no campeonato local (Zero Perda de Inscritos)
 function mesclarAtletasDoPacoteNuvemNoEventoLocal(eventoLocalId, pacoteNuvem, respeitarArquivadosLocais = true) {
     const inscricoesNuvem = Array.isArray(pacoteNuvem?.inscricoes) ? pacoteNuvem.inscricoes : [];
     const tentativasNuvem = Array.isArray(pacoteNuvem?.tentativas) ? pacoteNuvem.tentativas : [];
@@ -3717,7 +4206,7 @@ function gerarPacoteEventoParaNuvem(eventoId, organizadorIdOverride = null) {
         ORDER BY t.id ASC
     `).all(eventoId);
 
-    // Inclui o estado ativo das plataformas vinculadas a este campeonato para recuperação instantânea
+    // Pilar 4: Inclui o estado ativo das plataformas vinculadas a este campeonato para recuperação instantânea
     const estadosDasPlataformasDoEvento = {};
     for (let p = 1; p <= 5; p++) {
         const est = estadoPlataformas[p];
@@ -3742,7 +4231,7 @@ function gerarPacoteEventoParaNuvem(eventoId, organizadorIdOverride = null) {
     return pacote;
 }
 
-// Salva no Repositório Principal da Nuvem + Cofre de 20 Snapshots Point-in-Time
+// Salva no Repositório Principal da Nuvem + Cofre Rotativo de 20 Snapshots Point-in-Time (Pilar 4)
 function salvarPacoteNoRepositorioNuvem(pacote, opcoes = {}) {
     const validacao = validarESanitizarPacoteNuvem(pacote);
     if (!validacao.valido) {
@@ -4143,7 +4632,7 @@ app.post('/api/nuvem/publicar-acervo-local/:evento_id', async (req, res) => {
     }
 });
 
-// Endpoint para receber local
+// Endpoint recetor local
 app.post('/api/nuvem/receber_pacote', (req, res) => {
     try {
         const cfg = db.prepare('SELECT cloud_token FROM config_nuvem WHERE id = 1').get();
@@ -4221,10 +4710,10 @@ app.get('/api/nuvem/pacote/:nuvem_id', async (req, res) => {
 });
 
 // ============================================================================
-// IMPORTAÇÃO / DOWNLOAD DA NUVEM COM MESCLAGEM INTELIGENTE (EVITA PERDER DE ATLETAS):
-// 1. 'SUBSTITUIR'     - Atualiza configurações do campeonato com as da Nuvem e ADICIONA novos atletas da Web mantendo os atletas locais (ou restaura snapshot histórico se snapshot_id for escolhido)
-// 2. 'COPIA'          - Cria uma cópia independente do campeonato (local e opcionalmente na nuvem)
-// 3. 'APENAS_ATLETAS' - Mescla todos os atletas da Nuvem + App Offline e reinicia pesagens/tentativas de teste
+// MOTOR DE IMPORTAÇÃO / DOWNLOAD DA NUVEM COM FUSÃO INTELIGENTE (ZERO PERDA DE ATLETAS):
+// 1. 'SUBSTITUIR'     -> Atualiza configurações do campeonato com as da Nuvem e ADICIONA novos atletas da Web mantendo os atletas locais (ou restaura snapshot histórico se snapshot_id for escolhido)
+// 2. 'COPIA'          -> Cria uma cópia independente do campeonato (local e opcionalmente na nuvem)
+// 3. 'APENAS_ATLETAS' -> Mescla todos os atletas da Nuvem + App Offline e reinicia pesagens/tentativas de teste
 // ============================================================================
 app.post('/api/nuvem/importar', async (req, res) => {
     const {
@@ -4357,8 +4846,8 @@ app.post('/api/nuvem/importar', async (req, res) => {
                         eventoLocalId
                     );
 
-                    // Se não for restauração de um snapshot histórico específico e o campeonato local já possui atletas,
-                    // fazemos a mesclagem aditiva (adiciona os atletas da nuvem sem apagar os atletas locais)
+                    // Se NÃO for restauração de um snapshot histórico específico e o campeonato local já possui atletas,
+                    // fazemos a MESCLAGEM ADITIVA (adiciona os atletas da nuvem sem apagar os atletas locais!)
                     if (!ehRestauracaoSnapshotEspecifico && qtdAtletasLocaisAntes > 0) {
                         usarModoMesclagemAditiva = true;
                     } else {
@@ -4413,7 +4902,7 @@ app.post('/api/nuvem/importar', async (req, res) => {
                     const alvo = db.prepare('SELECT id FROM eventos WHERE id = ?').get(evento_local_alvo_id);
                     if (alvo) {
                         eventoLocalId = alvo.id;
-                        // Limpa apenas pesagens, baterias e tentativas de teste dos atletas locais (preservando os atletas inscritos localmente)
+                        // Limpa apenas pesagens, baterias e tentativas de teste dos atletas locais (preservando os atletas inscritos localmente!)
                         db.prepare('DELETE FROM tentativas WHERE inscricao_id IN (SELECT id FROM inscricoes WHERE evento_id = ?)').run(eventoLocalId);
                         db.prepare(`
                             UPDATE inscricoes
@@ -4740,11 +5229,8 @@ app.post('/api/nuvem/importar', async (req, res) => {
 });
 
 // ============================================================================
-// ROTAS ISOLADAS PARA IMPORTAÇÃO DE ATLETAS (CSV / JSON / XLSX)
+// 📥 ROTAS ISOLADAS DE APOIO À IMPORTAÇÃO DE ATLETAS (CSV / JSON / XLSX)
 // ============================================================================
-
-// Como eu adicionei esse endpoint depois da 1.0 ter sido lançada eu resolvi realizar essa implantação de forma isolada, reutilizando os endpoints já existentes
-// Para evitar problemas de integridade os atletas são validados 1 a 1.
 
 function decodificarEntidadesXml(str) {
     if (!str) return '';
@@ -4767,8 +5253,7 @@ function colunaExcelParaIndice(letras) {
     return Math.max(0, idx - 1);
 }
 
-// Leitor de arquivos .XLSX nativo usando o módulo 'zlib' do Node.js
-// Eu acho importante não usar dependências externas tanto para evitar problemas e questões de segurança e update quanto para poder subir na Microsoft para certificação
+// Leitor nativo de arquivos .XLSX usando apenas o módulo 'zlib' nativo do Node.js (Zero dependências externas)
 function extrairLinhasDeBufferXlsx(bufferZip) {
     let eocdOffset = -1;
     for (let i = bufferZip.length - 22; i >= Math.max(0, bufferZip.length - 65557); i--) {
@@ -4909,7 +5394,7 @@ function extrairLinhasDeBufferXlsx(bufferZip) {
         cabecalhos.forEach((nomeCol, idx) => {
             if (!nomeCol) return;
             let val = valores[idx] !== undefined ? String(valores[idx]).trim() : '';
-            // Converte o maldito serial de data do Excel caso esteja na coluna data_nascimento
+            // Converte serial de data do Excel (ex: 34926 -> 15/08/1995) caso esteja na coluna data_nascimento
             if (nomeCol === 'data_nascimento' && /^\d{5}$/.test(val)) {
                 const serial = parseInt(val, 10);
                 if (serial > 10000 && serial < 60000) {
@@ -5085,15 +5570,17 @@ app.post('/api/importar-atletas/verificar-sha256/:evento_id', (req, res) => {
 });
 
 // ============================================================================
-// CONFIGURAÇÃO DO SISTEMA EM TEMPO REAL COM SOCKET.IO
+// MOTOR DE TEMPO REAL (SOCKET.IO) - SUPORTE A 5 PLATAFORMAS INDEPENDENTES
 // ============================================================================
-
-// O código dos socket.io foi feito pelo Argon 4 e verificado por mim e pelo Carbon num teste recente. O mesmo vale para todo o código boilerplate
 
 io.on('connection', (socket) => {
     socket.emit('sincronizar_todas_plataformas', estadoPlataformas);
-    socket.emit('estado_atualizado', estadoPlataformas[1]);
-    socket.emit('sincronizar_estado', estadoPlataformas[1]);
+    for (let p = 1; p <= 5; p++) {
+        if (p === 1 || estadoPlataformas[p]?.evento_id) {
+            socket.emit('estado_atualizado', estadoPlataformas[p]);
+            socket.emit('sincronizar_estado', estadoPlataformas[p]);
+        }
+    }
 
     socket.on('solicitar_estado_plataforma', (plat) => {
         const p = validarPlataforma(plat || 1);
@@ -5112,7 +5599,7 @@ io.on('connection', (socket) => {
                 ? String(dados.bateria).trim()
                 : null;
 
-            // Proteção contra mais de uma aba aberta na mesma plataforma: se já há um atleta ativo na plataforma
+            // Proteção contra 2ª aba aberta na mesma plataforma: se já há um atleta ativo na plataforma
             // e o contexto enviado (evento/movimento/bateria) é o mesmo, não limpa o atleta em andamento
             if (
                 estAtual.atletaAtual &&
@@ -5334,7 +5821,7 @@ io.on('connection', (socket) => {
                     throw new Error(`Nenhuma linha atualizada para a tentativa #${tentativaId}.`);
                 }
 
-                // Garante que a próxima tentativa exista sempre que a anterior for concluída
+                // Garante que a próxima tentativa regulamentar (2ª ou 3ª) exista sempre que a anterior for concluída
                 if (tentExistente.numero_tentativa < 3) {
                     const proxTentativa = tentExistente.numero_tentativa + 1;
                     const existeProx = db.prepare('SELECT id FROM tentativas WHERE inscricao_id = ? AND movimento = ? AND numero_tentativa = ?')
@@ -5349,13 +5836,6 @@ io.on('connection', (socket) => {
                 }
 
                 // Auto-cura extra: se a 1ª e a 2ª tentativas já estão concluídas e a 3ª tentativa não existe, garante a criação da 3ª
-
-
-                // Obs: eu adicionei essas auto-curas pensando nas possibilidades de erros que podem acontecer durante a operação da mesa
-                // A ideia é evitar problemas mesmo se algo ficar faltando ou algum problema acontecer
-                // No pior dos casos algum valor fica como 0 (por exemplo segunda pedida), mas a competição continua, estabilidade absoluta do aplicativo
-
-
                 const concluidas1e2 = db.prepare(`
                     SELECT COUNT(1) as qtd FROM tentativas
                     WHERE inscricao_id = ? AND movimento = ? AND numero_tentativa IN (1, 2) AND estado = 'concluido'
@@ -5399,6 +5879,10 @@ io.on('connection', (socket) => {
 
     socket.on('arbitro_votou', (dados) => {
         try {
+            if (!validarTokenSessaoArbitro(dados?.token_arbitro)) {
+                socket.emit('arbitro_nao_autorizado');
+                return;
+            }
             const p = validarPlataforma(dados?.plataforma || 1);
             const estadoPlat = estadoPlataformas[p];
 
@@ -5476,8 +5960,8 @@ io.on('connection', (socket) => {
 });
 
 // ============================================================================
-// SINCRONIZAÇÃO IMEDIATA (EVENT-DRIVEN) + VARREDURA DE 30s
-// 100% ISOLADO DA MESA: NUNCA BLOQUEIA O EVENT LOOP NEM ATRASA O SOCKET.IO
+// ☁️ MOTOR DE SINCRONIZAÇÃO IMEDIATA (EVENT-DRIVEN) + VARREDURA DE 30s
+// (100% ISOLADO DA MESA: NUNCA BLOQUEIA O EVENT LOOP NEM ATRASA O SOCKET.IO)
 // ============================================================================
 
 let syncEmAndamento = false;
@@ -5504,9 +5988,10 @@ async function executarCicloSincronizacaoNuvem(executarBackupDisco = false) {
     try {
         if (executarBackupDisco) {
             await realizarBackupAutomatico();
+            executarBackupExternoSeguro('automatico').catch(() => {});
         }
 
-        // Seleciona apenas campeonatos que não estejam com sync_nuvem = -1 (sincronização cancelada pelo organizador)
+        // Seleciona apenas campeonatos que NÃO estejam com sync_nuvem = -1 (sincronização cancelada pelo organizador)
         const eventosPendentes = db.prepare(`
             SELECT DISTINCT e.id as evento_id
             FROM eventos e
@@ -5526,8 +6011,7 @@ async function executarCicloSincronizacaoNuvem(executarBackupDisco = false) {
             const eventoId = ev.evento_id;
 
             // Antes de enviar para a nuvem remota, verifica e mescla eventuais atletas inscritos pela Web no mesmo campeonato
-            // Limitado a 1 verificação a cada 30s durante competição ao vivo para não atrasar os cliques da mesa ou árbitros
-
+            // (Limitado a 1 verificação a cada 30s durante competição ao vivo para não atrasar os cliques da Mesa/Árbitros)
             if (ctx.temCredencialRemota) {
                 const agoraMs = Date.now();
                 const ultimoPull = ultimoPullMesclagemPorEvento[eventoId] || 0;
@@ -5542,7 +6026,7 @@ async function executarCicloSincronizacaoNuvem(executarBackupDisco = false) {
             const pacote = gerarPacoteEventoParaNuvem(eventoId, orgOverride);
             if (!pacote) continue;
 
-            // 1. Atualiza sempre o Cofre Local de Nuvem e Histórico de 20 Snapshots
+            // 1. Atualiza sempre o Cofre Local de Nuvem (e Histórico de 20 Snapshots)
             salvarPacoteNoRepositorioNuvem(pacote, { permitir_zerar_atletas: true });
 
             // 2. Se o organizador configurou credencial de nuvem, faz o Auto-Push com Circuit Breaker
@@ -5577,7 +6061,7 @@ async function executarCicloSincronizacaoNuvem(executarBackupDisco = false) {
                 }
             }
 
-            // 3. Só marca sync_nuvem = 1 se o upload teve sucesso e se nenhuma nova alteração aconteceu durante o envio
+            // 3. Só marca sync_nuvem = 1 se o upload teve sucesso E se nenhuma nova alteração aconteceu durante o envio
             if (uploadRemotoOk) {
                 let versaoMantida = false;
                 db.transaction(() => {
@@ -5711,7 +6195,7 @@ server.on('error', (err) => {
 
 server.listen(PORT, '0.0.0.0', () => {
     tentativasBindPorta = 0;
-    console.log(`- Servidor Brasil Powerlifting rodando!`);
+    console.log(`🚀 Servidor Brasil Powerlifting rodando!`);
     console.log(`- Neste computador: http://localhost:${PORT}`);
     console.log(`- Em telemóveis/tablets/TVs na mesma rede Wi-Fi: veja os IPs na tela inicial`);
 });

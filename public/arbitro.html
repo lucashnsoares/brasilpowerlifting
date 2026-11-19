@@ -26,7 +26,16 @@
 
     <div class="status-rede online" id="badge_rede_arbitro">🟢 Conectado à Mesa</div>
 
-    <div class="cabecalho">
+    <!-- Tela de Bloqueio por Senha (exibida apenas quando ativada pelo organizador) -->
+    <div id="painel_senha_arbitro" style="display: none; background: #222; padding: 25px 20px; border-radius: 8px; border: 1px solid #16a085; max-width: 400px; margin: 15px auto;">
+        <h3 style="margin-top: 0; color: #1abc9c;">🔐 Acesso Restrito aos Árbitros</h3>
+        <p style="font-size: 14px; color: #ccc; margin-bottom: 15px;">Digite a senha informada pela Mesa de Controle:</p>
+        <input type="password" id="input_senha_login_arbitro" placeholder="Senha / PIN" onkeypress="if(event.key==='Enter') autenticarArbitro()" style="width: 100%; padding: 14px; font-size: 20px; text-align: center; border-radius: 6px; border: 1px solid #555; background: #111; color: #fff; box-sizing: border-box; margin-bottom: 12px;">
+        <button type="button" onclick="autenticarArbitro()" style="width: 100%; padding: 15px; font-size: 18px; font-weight: bold; background: #16a085; color: #fff; border: none; border-radius: 6px; cursor: pointer;">LIBERAR PAINEL</button>
+        <div id="erro_senha_arbitro" style="display: none; color: #e74c3c; font-size: 14px; font-weight: bold; margin-top: 12px;"></div>
+    </div>
+
+    <div class="cabecalho" id="cabecalho_arbitro">
         <div>
             <label style="display:block; margin-bottom: 6px; font-weight:bold; color:#f39c12;">1. Sua Plataforma:</label>
             <select id="plataforma_arbitro" onchange="trocarPlataformaArbitro()">
@@ -66,7 +75,7 @@
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
-    const socket = io({ reconnection: true, reconnectionDelay: 1000, reconnectionAttempts: Infinity });
+    const socket = io({ reconnection: true, reconnectionDelay: 200, reconnectionDelayMax: 1000, reconnectionAttempts: Infinity });
     const urlParams = new URLSearchParams(window.location.search);
     let plataformaArbitro = parseInt(urlParams.get('plataforma') || localStorage.getItem('powerlifting_plataforma_arbitro') || '1', 10) || 1;
     if (plataformaArbitro < 1 || plataformaArbitro > 5) plataformaArbitro = 1;
@@ -75,13 +84,90 @@
     let editandoVotoLocal = false;
     let estadoGlobal = null;
     let tentativaAtualId = null;
+    let tokenArbitro = localStorage.getItem('powerlifting_token_arbitro') || '';
+    let arbitroAutorizado = true;
+    let timerDescArbitro = null;
 
     window.onerror = function(msg, url, lineNo) {
         console.error("🛡️ [AIRBAG ÁRBITRO]:", msg, "Linha:", lineNo);
         return false;
     };
 
-    window.onload = function() {
+    async function checarAutorizacaoArbitro() {
+        try {
+            const r = await fetch('/api/arbitro/status');
+            const d = await r.json();
+            if (!d.exige_senha) {
+                definirBloqueioTelaArbitro(false);
+                return;
+            }
+            if (tokenArbitro) {
+                const rv = await fetch('/api/arbitro/verificar_token', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token: tokenArbitro })
+                });
+                const dv = await rv.json();
+                if (dv.autorizado) {
+                    definirBloqueioTelaArbitro(false);
+                    return;
+                }
+            }
+            definirBloqueioTelaArbitro(true);
+        } catch (e) {}
+    }
+
+    function definirBloqueioTelaArbitro(bloquear) {
+        arbitroAutorizado = !bloquear;
+        document.getElementById('painel_senha_arbitro').style.display = bloquear ? 'block' : 'none';
+        document.getElementById('cabecalho_arbitro').style.display = bloquear ? 'none' : 'flex';
+        if (bloquear) {
+            document.getElementById('area_voto').style.display = 'none';
+        } else {
+            const pos = document.getElementById('posicao_arbitro').value;
+            document.getElementById('area_voto').style.display = pos ? 'block' : 'none';
+            renderizarInterface();
+        }
+    }
+
+    async function autenticarArbitro() {
+        const inp = document.getElementById('input_senha_login_arbitro');
+        const errEl = document.getElementById('erro_senha_arbitro');
+        const senha = inp ? inp.value.trim() : '';
+        if (!senha) return;
+
+        try {
+            const r = await fetch('/api/arbitro/autenticar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ senha })
+            });
+            const d = await r.json();
+            if (!r.ok || !d.ok) {
+                errEl.innerText = d.erro || "Senha incorreta.";
+                errEl.style.display = 'block';
+                return;
+            }
+            tokenArbitro = d.token || '';
+            localStorage.setItem('powerlifting_token_arbitro', tokenArbitro);
+            errEl.style.display = 'none';
+            inp.value = '';
+            definirBloqueioTelaArbitro(false);
+            socket.emit('solicitar_estado_plataforma', plataformaArbitro);
+        } catch (e) {
+            errEl.innerText = "Falha de conexão com o servidor.";
+            errEl.style.display = 'block';
+        }
+    }
+
+    socket.on('config_senha_arbitro_alterada', () => { checarAutorizacaoArbitro(); });
+    socket.on('arbitro_nao_autorizado', () => {
+        tokenArbitro = '';
+        localStorage.removeItem('powerlifting_token_arbitro');
+        definirBloqueioTelaArbitro(true);
+    });
+
+    window.onload = async function() {
         document.getElementById('plataforma_arbitro').value = String(plataformaArbitro);
         const posParam = urlParams.get('posicao');
         const posSalva = (posParam && ['esquerda', 'central', 'direita'].includes(posParam))
@@ -91,18 +177,24 @@
             document.getElementById('posicao_arbitro').value = posSalva;
             document.getElementById('area_voto').style.display = 'block';
         }
+        await checarAutorizacaoArbitro();
         socket.emit('solicitar_estado_plataforma', plataformaArbitro);
     };
 
     socket.on('connect', () => {
+        if (timerDescArbitro) { clearTimeout(timerDescArbitro); timerDescArbitro = null; }
         const b = document.getElementById('badge_rede_arbitro');
         if (b) { b.className = 'status-rede online'; b.innerText = '🟢 Conectado à Mesa'; }
+        checarAutorizacaoArbitro();
         socket.emit('solicitar_estado_plataforma', plataformaArbitro);
     });
 
     socket.on('disconnect', () => {
-        const b = document.getElementById('badge_rede_arbitro');
-        if (b) { b.className = 'status-rede offline'; b.innerText = '🔴 Reconectando ao Wi-Fi...'; }
+        if (timerDescArbitro) clearTimeout(timerDescArbitro);
+        timerDescArbitro = setTimeout(() => {
+            const b = document.getElementById('badge_rede_arbitro');
+            if (b) { b.className = 'status-rede offline'; b.innerText = '🔴 Reconectando ao Wi-Fi...'; }
+        }, 2500);
     });
 
     function trocarPlataformaArbitro() {
@@ -129,6 +221,7 @@
     function verificarEstado() {
         const posicao = document.getElementById('posicao_arbitro').value;
         localStorage.setItem('powerlifting_posicao_arbitro', posicao);
+        if (!arbitroAutorizado) return;
         document.getElementById('area_voto').style.display = posicao ? 'block' : 'none';
         editandoVotoLocal = false;
         renderizarInterface();
@@ -236,7 +329,8 @@
             plataforma: plataformaArbitro,
             tentativa_id: idTentativaAtiva,
             posicao: posicao,
-            voto: votoAtual
+            voto: votoAtual,
+            token_arbitro: tokenArbitro
         });
         document.getElementById('btn_enviar').disabled = true;
         const msgEl = document.getElementById('msg_sucesso');

@@ -19,8 +19,8 @@ using System.Windows.Forms;
 [assembly: AssemblyDescription("Gerenciador de Servidor Local Powerlifting")]
 [assembly: AssemblyCompany("Hiroshi Tecnologia")]
 [assembly: AssemblyProduct("Gestão de Torneios Brasil Powerlifting")]
-[assembly: AssemblyVersion("1.2.3.0")]
-[assembly: AssemblyFileVersion("1.2.3.0")]
+[assembly: AssemblyVersion("1.3.1.0")]
+[assembly: AssemblyFileVersion("1.3.1.0")]
 
 namespace PowerliftingLauncher
 {

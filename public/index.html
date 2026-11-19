@@ -54,10 +54,43 @@
         <a href="/nuvem" class="card-menu" style="background: #1abc9c; grid-column: 1 / -1;">☁️ Central da Nuvem & Backups<span>100% funcional Offline. Exporte arquivos .JSON ou sincronize campeonatos na Nuvem</span></a>
     </div>
 
-    <div class="painel-rede">
+    <!-- PROTEÇÃO DOS ÁRBITROS EM WI-FI COMPARTILHADO / PÚBLICO -->
+    <div style="margin-top: 35px; background: #f8f9fa; padding: 18px 20px; border-radius: 8px; border-left: 5px solid #16a085; border: 1px solid #dce4e6; border-left-width: 5px; border-left-color: #16a085;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+            <h3 style="margin: 0; color: #16a085; font-size: 17px;">🔐 Senha de Acesso dos Árbitros (Wi-Fi Compartilhado)</h3>
+            <span id="badge_status_senha_arbitro" style="font-size: 12px; font-weight: bold; padding: 4px 10px; border-radius: 4px; background: #e8f8f5; color: #117864;">🔓 Acesso Livre (Sem Senha)</span>
+        </div>
+        <p style="margin: 8px 0 12px 0; font-size: 13px; color: #555;">Opcional: Defina uma senha ou PIN para impedir que pessoas não autorizadas no mesmo Wi-Fi abram o Painel dos Árbitros e enviem luzes.</p>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+            <input type="password" id="input_senha_arbitro_cfg" placeholder="Digite uma senha ou PIN (ex: 2026)" style="flex: 1; min-width: 200px; padding: 9px 12px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px;">
+            <button type="button" onclick="alternarVisibilidadeSenhaCfg()" style="background: #ecf0f1; color: #2c3e50; border: 1px solid #bdc3c7; padding: 9px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px;" title="Mostrar/Ocultar senha">👁️</button>
+            <button type="button" onclick="salvarSenhaArbitroCfg()" style="background: #16a085; color: white; border: none; padding: 10px 16px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px;">💾 Salvar Senha</button>
+            <button type="button" id="btn_remover_senha_arbitro" onclick="removerSenhaArbitroCfg()" style="display: none; background: #e74c3c; color: white; border: none; padding: 10px 14px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px;">🔓 Remover Senha</button>
+        </div>
+    </div>
+
+    <div class="painel-rede" style="margin-top: 20px;">
         <h3>📱 Links Diretos para Celulares e Smart TVs (Mesmo Wi-Fi):</h3>
         <p>Use os endereços abaixo nos aparelhos conectados ao mesmo roteador Wi-Fi deste computador:</p>
         <div id="lista_links">Carregando...</div>
+    </div>
+
+    <!-- BACKUP EXTERNO OPCIONAL (PENDRIVE USB / PASTA ESCOLHIDA - 3 SNAPSHOTS ROTATIVOS) -->
+    <div style="margin-top: 20px; background: #f8f9fa; padding: 18px 20px; border-radius: 8px; border: 1px solid #dce4e6; border-left: 5px solid #2980b9;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+            <h3 style="margin: 0; color: #2980b9; font-size: 17px;">💾 Cópia Automática em Pendrive / Pasta Externa (Opcional)</h3>
+            <span id="badge_status_usb" style="font-size: 12px; font-weight: bold; padding: 4px 10px; border-radius: 4px; background: #ecf0f1; color: #555;">Desativado</span>
+        </div>
+        <p style="margin: 8px 0 12px 0; font-size: 13px; color: #555;">Salva automaticamente <strong>3 snapshots rotativos</strong> (<code>.db</code> e <code>.json</code>) a cada 30s com escrita atômica anti-corrupção. Se o pendrive for removido, o campeonato continua funcionando normalmente.</p>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+            <input type="text" id="input_pasta_backup_externo" placeholder="Ex: E:\Backups_Powerlifting" style="flex: 1; min-width: 220px; padding: 9px 12px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; font-family: monospace;">
+            <button type="button" id="btn_procurar_pasta_usb" onclick="selecionarPastaWindowsBackup()" style="background: #34495e; color: white; border: none; padding: 10px 14px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px;">📂 Escolher Pasta...</button>
+            <button type="button" id="btn_salvar_pasta_usb" onclick="salvarConfigBackupExterno()" style="background: #2980b9; color: white; border: none; padding: 10px 16px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px;">💾 Ativar e Salvar Agora</button>
+            <button type="button" id="btn_desativar_usb" onclick="desativarBackupExterno()" style="display: none; background: #7f8c8d; color: white; border: none; padding: 10px 14px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px;">✖ Desativar</button>
+            <input type="file" id="input_arquivo_restaurar_usb" accept=".json" style="display: none;" onchange="restaurarBackupExternoSelecionado(this)">
+            <button type="button" id="btn_restaurar_usb" onclick="document.getElementById('input_arquivo_restaurar_usb').click()" style="background: #27ae60; color: white; border: none; padding: 10px 14px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px;" title="Selecione qualquer arquivo brasil_powerlifting_campeonatos_1/2/3.json do pendrive">♻️ Restaurar Backup (.json)</button>
+        </div>
+        <small id="txt_detalhe_status_usb" style="display: block; margin-top: 8px; color: #7f8c8d; font-size: 12px;"></small>
     </div>
 
     <div style="margin-top: 25px; border-top: 1px solid #ddd; padding-top: 15px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
@@ -435,7 +468,226 @@
             const urlFallback = `${window.location.origin}/`;
             container.innerHTML = montarItemLinkComQR(urlFallback, urlFallback, 'qr_fallback_0', 'margin-bottom: 0;');
         }
+
+        carregarEstadoSegurancaEBackup();
     };
+
+    async function carregarEstadoSegurancaEBackup() {
+        try {
+            const rSenha = await fetch('/api/arbitro/config_senha');
+            if (rSenha.ok) {
+                const dSenha = await rSenha.json();
+                atualizarUISenhaArbitro(dSenha.ativa, dSenha.senha || '');
+            }
+        } catch (e) {}
+
+        try {
+            const rUsb = await fetch('/api/backup-externo/config');
+            if (rUsb.ok) {
+                const dUsb = await rUsb.json();
+                atualizarUIBackupExterno(dUsb);
+            }
+        } catch (e) {}
+    }
+
+    function atualizarUISenhaArbitro(ativa, senhaAtual) {
+        const badge = document.getElementById('badge_status_senha_arbitro');
+        const input = document.getElementById('input_senha_arbitro_cfg');
+        const btnRem = document.getElementById('btn_remover_senha_arbitro');
+        if (!badge || !input || !btnRem) return;
+
+        input.value = senhaAtual || '';
+        if (ativa) {
+            badge.innerText = '🔒 Protegido por Senha';
+            badge.style.background = '#fadbd8';
+            badge.style.color = '#922b21';
+            btnRem.style.display = 'inline-block';
+        } else {
+            badge.innerText = '🔓 Acesso Livre (Sem Senha)';
+            badge.style.background = '#e8f8f5';
+            badge.style.color = '#117864';
+            btnRem.style.display = 'none';
+        }
+    }
+
+    function alternarVisibilidadeSenhaCfg() {
+        const inp = document.getElementById('input_senha_arbitro_cfg');
+        if (inp) inp.type = inp.type === 'password' ? 'text' : 'password';
+    }
+
+    async function salvarSenhaArbitroCfg() {
+        const inp = document.getElementById('input_senha_arbitro_cfg');
+        const senha = inp ? inp.value.trim() : '';
+        if (!senha) {
+            return removerSenhaArbitroCfg();
+        }
+        try {
+            const r = await fetch('/api/arbitro/config_senha', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ senha })
+            });
+            const d = await r.json();
+            if (!r.ok) return alert(d.erro || "Erro ao salvar senha.");
+            atualizarUISenhaArbitro(true, senha);
+            alert("✅ Senha dos árbitros ativada! Os celulares precisarão informar esta senha para enviar luzes.");
+        } catch (e) {
+            alert("Erro de comunicação ao salvar senha.");
+        }
+    }
+
+    async function removerSenhaArbitroCfg() {
+        try {
+            const r = await fetch('/api/arbitro/config_senha', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ senha: '' })
+            });
+            if (r.ok) {
+                atualizarUISenhaArbitro(false, '');
+                alert("🔓 Senha removida. O Painel dos Árbitros voltou ao acesso livre.");
+            }
+        } catch (e) {}
+    }
+
+    function atualizarUIBackupExterno(cfg) {
+        const badge = document.getElementById('badge_status_usb');
+        const inp = document.getElementById('input_pasta_backup_externo');
+        const btnDes = document.getElementById('btn_desativar_usb');
+        const detalhe = document.getElementById('txt_detalhe_status_usb');
+        if (!badge || !inp || !btnDes || !detalhe) return;
+
+        const pasta = cfg?.pasta_destino || '';
+        inp.value = pasta;
+
+        if (!pasta) {
+            badge.innerText = 'Desativado';
+            badge.style.background = '#ecf0f1';
+            badge.style.color = '#555';
+            btnDes.style.display = 'none';
+            detalhe.innerText = '';
+        } else if (cfg.ultimo_erro) {
+            badge.innerText = '⚠️ Destino Inacessível';
+            badge.style.background = '#fff3cd';
+            badge.style.color = '#856404';
+            btnDes.style.display = 'inline-block';
+            detalhe.innerText = `Aviso: ${cfg.ultimo_erro} (Reconecte o pendrive para retomar automaticamente).`;
+        } else {
+            badge.innerText = `🟢 Ativo (Slot ${cfg.slot_atual || 1}/3)`;
+            badge.style.background = '#d4efdf';
+            badge.style.color = '#196f3d';
+            btnDes.style.display = 'inline-block';
+            const hora = cfg.ultimo_sucesso_em ? new Date(cfg.ultimo_sucesso_em).toLocaleTimeString() : 'agora';
+            detalhe.innerText = `Última gravação concluída às ${hora} em ${pasta}`;
+        }
+    }
+
+    async function selecionarPastaWindowsBackup() {
+        const btn = document.getElementById('btn_procurar_pasta_usb');
+        if (btn) { btn.disabled = true; btn.innerText = '⏳ Abrindo...'; }
+        try {
+            const r = await fetch('/api/backup-externo/selecionar-pasta', { method: 'POST' });
+            const d = await r.json();
+            if (d.pasta_destino) {
+                document.getElementById('input_pasta_backup_externo').value = d.pasta_destino;
+            } else if (d.erro) {
+                alert(d.erro);
+            }
+        } catch (e) {
+            alert("Digite ou cole o caminho da pasta manualmente no campo.");
+        } finally {
+            if (btn) { btn.disabled = false; btn.innerText = '📂 Escolher Pasta...'; }
+        }
+    }
+
+    async function salvarConfigBackupExterno() {
+        const inp = document.getElementById('input_pasta_backup_externo');
+        const pasta = inp ? inp.value.trim() : '';
+        if (!pasta) return alert("Escolha ou digite uma pasta/pendrive primeiro.");
+
+        const btn = document.getElementById('btn_salvar_pasta_usb');
+        if (btn) { btn.disabled = true; btn.innerText = '⏳ Testando...'; }
+        try {
+            const r = await fetch('/api/backup-externo/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pasta_destino: pasta })
+            });
+            const d = await r.json();
+            if (!r.ok) {
+                alert(d.erro || "Não foi possível gravar nesta pasta.");
+                carregarEstadoSegurancaEBackup();
+                return;
+            }
+            atualizarUIBackupExterno(d);
+            alert(`✅ Backup externo ativado!\nOs 3 snapshots rotativos estão sendo salvos em:\n${pasta}`);
+        } catch (e) {
+            alert("Erro ao salvar configuração de backup externo.");
+        } finally {
+            if (btn) { btn.disabled = false; btn.innerText = '💾 Ativar e Salvar Agora'; }
+        }
+    }
+
+    async function desativarBackupExterno() {
+        try {
+            const r = await fetch('/api/backup-externo/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pasta_destino: '' })
+            });
+            if (r.ok) atualizarUIBackupExterno({ pasta_destino: '' });
+        } catch (e) {}
+    }
+
+    async function restaurarBackupExternoSelecionado(inputEl) {
+        const arquivo = inputEl?.files?.[0];
+        if (!arquivo) return;
+
+        const btn = document.getElementById('btn_restaurar_usb');
+        try {
+            const texto = await arquivo.text();
+            let dados;
+            try {
+                dados = JSON.parse(texto);
+            } catch (e) {
+                alert("❌ O arquivo selecionado não é um backup .JSON válido.");
+                return;
+            }
+
+            const lista = Array.isArray(dados.campeonatos) ? dados.campeonatos : (dados.evento ? [dados] : []);
+            if (lista.length === 0) {
+                alert("❌ Nenhum campeonato encontrado dentro deste arquivo de backup.");
+                return;
+            }
+
+            const resumo = lista.map(p => `• ${p.evento?.nome || 'Campeonato'} (${Array.isArray(p.inscricoes) ? p.inscricoes.length : 0} atletas)`).join('\n');
+            const dataBkp = dados.gerado_em ? `\nData do Snapshot: ${new Date(dados.gerado_em).toLocaleString()}` : '';
+            const confirmar = confirm(
+                `♻️ RESTAURAR BACKUP EXTERNO\n${dataBkp}\n\nCampeonatos encontrados (${lista.length}):\n${resumo}\n\n` +
+                `Um snapshot de segurança do banco atual será salvo antes da restauração.\nDeseja restaurar agora?`
+            );
+            if (!confirmar) return;
+
+            if (btn) { btn.disabled = true; btn.innerText = '⏳ Restaurando...'; }
+            const r = await fetch('/api/backup-externo/restaurar-json', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(dados)
+            });
+            const resJson = await r.json();
+            if (!r.ok || !resJson.ok) {
+                alert("❌ Falha ao restaurar: " + (resJson.erro || "Erro desconhecido."));
+                return;
+            }
+
+            alert(`✅ Backup restaurado com sucesso!\n\nCampeonatos recuperados: ${resJson.eventos}\nTotal de inscrições restauradas: ${resJson.atletas}`);
+        } catch (e) {
+            alert("❌ Erro ao ler ou enviar o arquivo de backup: " + e.message);
+        } finally {
+            inputEl.value = '';
+            if (btn) { btn.disabled = false; btn.innerText = '♻️ Restaurar Backup (.json)'; }
+        }
+    }
 
     async function desligarServidorComSeguranca() {
         const confirmar = confirm(

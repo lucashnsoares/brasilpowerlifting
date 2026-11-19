@@ -1,6 +1,11 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+
+<!-- Futuramente eu quero mudar a lógica de prompt() confirm() para evitar o congelamento do browser -->
+<!-- Eu preferi deixar tudo num código só para acelerar a criação, mas eu tenho intenção de separar e deixar mais "padrão da indústria" com debuggin mais fácil-->
+<!-- Foi mais fácil e seguro criar uma automação que traduz as páginas sem alterar o código do que criar uma automação que adicione as tags do dicionário -->
+
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Score Table - Powerlifting</title>
@@ -45,6 +50,8 @@
         .lista-pendente { background: #fff3cd; border: 1px solid #ffeeba; padding: 10px; border-radius: 5px; margin-top: 15px; }
         .item-pendente { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px dashed #eedc9a; flex-wrap: wrap; }
         .item-pendente:last-child { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
+        .badge-timer-pedida { display: inline-block; background: #fef9e7; color: #7d6608; border: 1px solid #d4ac0d; border-radius: 4px; padding: 1px 6px; font-family: monospace; font-size: 12px; font-weight: bold; line-height: 1.3; white-space: nowrap; }
+        .badge-timer-pedida.expirado { background: #e74c3c; color: #fff; border-color: #c0392b; }
         .atalhos-pedida { width: 100%; display: flex; gap: 5px; margin-top: 4px; flex-wrap: wrap; }
         .btn-atalho-peso { background: #fff; border: 1px solid #d4ac0d; color: #7d6608; border-radius: 4px; padding: 3px 8px; font-size: 11px; font-weight: bold; cursor: pointer; }
         .btn-atalho-peso:hover { background: #f9e79f; }
@@ -1034,6 +1041,55 @@
         }
     }
 
+    // Cronômetro visual isolado de 1 minuto para "Aguardando Pedida" (apenas alerta visual)
+    let iniciosTimerPedida = {};
+    try {
+        iniciosTimerPedida = JSON.parse(sessionStorage.getItem('powerlifting_timers_pedida') || '{}') || {};
+    } catch (e) { iniciosTimerPedida = {}; }
+
+    function salvarCacheTimersPedida() {
+        try { sessionStorage.setItem('powerlifting_timers_pedida', JSON.stringify(iniciosTimerPedida)); } catch (e) {}
+    }
+
+    function obterEstadoTimerPedida(tentativaId) {
+        const chave = String(tentativaId);
+        if (!iniciosTimerPedida[chave]) {
+            iniciosTimerPedida[chave] = Date.now();
+            salvarCacheTimersPedida();
+        }
+        const decorridoSeg = Math.floor((Date.now() - iniciosTimerPedida[chave]) / 1000);
+        const restante = Math.max(0, 60 - decorridoSeg);
+        const min = String(Math.floor(restante / 60)).padStart(2, '0');
+        const seg = String(restante % 60).padStart(2, '0');
+        return { texto: `⏱ ${min}:${seg}`, expirado: restante <= 0 };
+    }
+
+    function sincronizarMapaTimersPedida(listaPendentes) {
+        try {
+            const idsAtivos = new Set((listaPendentes || []).map(a => String(Number(a.tentativa_id) || 0)));
+            let mudou = false;
+            Object.keys(iniciosTimerPedida).forEach(k => {
+                if (!idsAtivos.has(k)) {
+                    delete iniciosTimerPedida[k];
+                    mudou = true;
+                }
+            });
+            if (mudou) salvarCacheTimersPedida();
+        } catch (e) {}
+    }
+
+    setInterval(() => {
+        try {
+            document.querySelectorAll('.badge-timer-pedida[data-tent-id]').forEach(el => {
+                const id = el.getAttribute('data-tent-id');
+                if (!id) return;
+                const est = obterEstadoTimerPedida(id);
+                if (el.textContent !== est.texto) el.textContent = est.texto;
+                el.classList.toggle('expirado', est.expirado);
+            });
+        } catch (e) {}
+    }, 1000);
+
     function renderizarFilas(forcarImediato = false) {
         try {
             // Se o mesário está com o botão do rato pressionado num botão da fila, adia a reconstrução do DOM por ~180ms
@@ -1123,9 +1179,11 @@
             }
             contFila.innerHTML = htmlFila;
 
+            sincronizarMapaTimersPedida(pendentesAtuais);
+
             let htmlPend = '';
             if (pendentesAtuais.length === 0) {
-                htmlPend = '<span style="color: #856404; font-size: 14px;">No lifters awaiting next attempt.</span>';
+                htmlPend = '<span style="color: #856404; font-size: 14px;">No athlete with pending status.</span>';
             } else {
                 pendentesAtuais.forEach((atl, idx) => {
                     try {
@@ -1133,6 +1191,7 @@
                         const pesoAnt = Number(atl.peso_solicitado) || 0;
                         const inputId = `pedida_${tentId}`;
                         const valorPreservado = valoresDigitados[inputId] !== undefined ? valoresDigitados[inputId] : '';
+                        const infoTimer = obterEstadoTimerPedida(tentId);
 
                         const atalhosHtml = pesoAnt > 0 ? `
                             <div class="atalhos-pedida">
@@ -1145,9 +1204,12 @@
 
                         htmlPend += `
                             <div class="item-pendente">
-                                <div style="flex: 2; min-width: 120px; font-size: 14px;">
-                                    <strong>${escapeHtml(atl.nome || 'Lifter')}</strong> (Att. ${atl.numero_tentativa || 2})<br>
-                                    <small style="color:#777;">Previous: ${pesoAnt}kg</small>
+                                <div style="flex: 2; min-width: 130px; font-size: 14px;">
+                                    <strong>${escapeHtml(atl.nome || 'Atleta')}</strong> (${atl.numero_tentativa || 2}ª Tent.)<br>
+                                    <span style="display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 2px;">
+                                        <small style="color:#777;">Anterior: ${pesoAnt}kg</small>
+                                        <span class="badge-timer-pedida ${infoTimer.expirado ? 'expirado' : ''}" data-tent-id="${tentId}">${infoTimer.texto}</span>
+                                    </span>
                                 </div>
                                 <input type="number" id="${inputId}" value="${escapeHtml(valorPreservado)}" step="0.5" placeholder="kg" onwheel="this.blur()" style="flex: 1; min-width: 70px; padding: 6px; margin:0;" onkeypress="if(event.key === 'Enter') salvarPedida(${tentId}, ${pesoAnt})">
                                 <button class="btn-acao" id="btn_pedida_${tentId}" style="flex: 1; min-width: 65px; margin:0; padding: 7px 10px; font-size: 13px;" onclick="salvarPedida(${tentId}, ${pesoAnt})">Save</button>
@@ -1181,7 +1243,7 @@
                 }
             }
         } catch (erro) {
-            console.error("Erro ao renderizar filas:", erro);
+            console.error("Erro generatin queues:", erro);
         }
     }
 
